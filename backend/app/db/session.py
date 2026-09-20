@@ -64,9 +64,9 @@ def check_db_connection() -> bool:
 
 
 def init_db() -> None:
-    """Initialize database tables placeholder.
-
-    Concrete tables will be defined in subsequent feature issues.
-    """
+    """Initialize database tables safely on application startup."""
     _ensure_sqlite_directory()
+    # Import models here so Base.metadata is aware of all declared entities
+    import app.models  # noqa: F401
+
     Base.metadata.create_all(bind=engine)

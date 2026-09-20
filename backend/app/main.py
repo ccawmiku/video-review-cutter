@@ -48,6 +48,8 @@ def read_root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "api_health": "/api/health",
+        "videos": "/api/videos",
+        "catalog_scan": "/api/videos/scan",
         "version": "0.1.0",
     }
 
