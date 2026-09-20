@@ -57,12 +57,12 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 11
+          version: 10.34.5
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "22.14.0"
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
@@ -96,10 +96,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./backend
+          platforms: linux/amd64
           push: false
 
       - name: Build Frontend Container
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
+          platforms: linux/amd64
           push: false

@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for FastAPI Backend
-FROM python:3.12-slim AS base
+FROM --platform=linux/amd64 python:3.12.9-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

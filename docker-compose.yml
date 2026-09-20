@@ -1,5 +1,6 @@
 services:
   backend:
+    platform: linux/amd64
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -26,6 +27,7 @@ services:
       - ${HOST_DISCARDED_DIR:-./mock_media/discarded}:/media/discarded:rw
 
   frontend:
+    platform: linux/amd64
     build:
       context: ./frontend
       dockerfile: Dockerfile
