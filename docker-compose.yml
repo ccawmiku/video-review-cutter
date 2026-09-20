@@ -1,0 +1,39 @@
+services:
+  backend:
+    platform: linux/amd64
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video-review-cutter-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ENVIRONMENT=production
+      - VIDEO_ROOTS=/media/videos
+      - ARCHIVE_DIR=/media/archive
+      - DISCARDED_DIR=/media/discarded
+      - DATABASE_URL=sqlite:////app/data/video_review.db
+      - FFMPEG_PATH=ffmpeg
+      - FFPROBE_PATH=ffprobe
+      - CORS_ORIGINS=["http://localhost:5173","http://localhost:80"]
+    volumes:
+      - ./data:/app/data
+      # 挂载宿主机媒体目录：只读挂载视频源，读写挂载归档与废弃目录
+      - ${HOST_VIDEO_ROOT:-./mock_media/videos}:/media/videos:ro
+      - ${HOST_ARCHIVE_DIR:-./mock_media/archive}:/media/archive:rw
+      - ${HOST_DISCARDED_DIR:-./mock_media/discarded}:/media/discarded:rw
+
+  frontend:
+    platform: linux/amd64
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: video-review-cutter-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend

@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+
+# Build and dist outputs
+dist/
+build/
+*.egg-info/
+.eggs/
+*.tsbuildinfo
+.tsbuildinfo
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Test and coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases and storage
+*.db
+*.sqlite
+*.sqlite3
+data/
+**/data/
+storage/
+**/storage/
+mock_media/
+
+# Media files
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.m2ts
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
