@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
@@ -63,7 +63,7 @@ def check_db_connection() -> bool:
         return False
 
 
-def migrate_schema_compatibility(target_engine=None) -> None:
+def migrate_schema_compatibility(target_engine: Engine | None = None) -> None:
     """Ensure newly added columns exist in SQLite database if tables were pre-existing."""
     from sqlalchemy import inspect, text
 

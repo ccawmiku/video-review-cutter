@@ -295,6 +295,8 @@ def test_discard_invalid_roots_and_traversal(
     db = session_factory()
     v1 = db.query(Video).filter(Video.id == video_outside_id).first()
     v2 = db.query(Video).filter(Video.id == video_traversal_id).first()
+    assert v1 is not None
+    assert v2 is not None
     assert v1.status == VideoStatus.UNPROCESSED.value
     assert v2.status == VideoStatus.UNPROCESSED.value
     db.close()
@@ -380,6 +382,7 @@ def test_discard_symlink_escape(
     assert target_outside.exists()
     db = session_factory()
     v = db.query(Video).filter(Video.id == video_id).first()
+    assert v is not None
     assert v.status == VideoStatus.UNPROCESSED.value
     db.close()
 
@@ -428,6 +431,7 @@ def test_discard_failure_rollback(
     assert source_file.read_bytes() == b"content before failure"
     db = session_factory()
     v = db.query(Video).filter(Video.id == video_id).first()
+    assert v is not None
     assert v.status == VideoStatus.UNPROCESSED.value
     assert v.path == str(source_file)
     db.close()
