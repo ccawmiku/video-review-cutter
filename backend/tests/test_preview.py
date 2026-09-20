@@ -433,10 +433,10 @@ def test_preview_path_safety_symlink_escapes_403(
         orig_resolve = Path.resolve
         orig_is_symlink = Path.is_symlink
 
-        def mock_resolve(self: Path, *args: object, **kwargs: object) -> Path:
+        def mock_resolve(self: Path, strict: bool = False) -> Path:
             if self.name == "fake_symlink.mp4":
-                return outside_file.resolve()
-            return orig_resolve(self, *args, **kwargs)
+                return outside_file.resolve(strict=strict)
+            return orig_resolve(self, strict=strict)
 
         def mock_is_symlink(self: Path) -> bool:
             if self.name == "fake_symlink.mp4":
