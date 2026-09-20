@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -21,6 +21,7 @@ from app.schemas.video import (
     VideoRead,
 )
 from app.services.catalog import catalog_service
+from app.services.streaming import streaming_service
 
 router = APIRouter()
 
@@ -111,3 +112,36 @@ def get_video(
             detail=f"Video with id {video_id} not found",
         )
     return VideoRead.model_validate(video)
+
+
+@router.api_route(
+    "/{video_id}/preview",
+    methods=["GET", "HEAD"],
+    summary="Stream video preview with HTTP Range support",
+    description=(
+        "Stream catalog video with single HTTP Range support (206/416), "
+        "proper MIME and Content-Range headers, chunked streaming without whole-file buffering, "
+        "and path safety validations."
+    ),
+)
+@router.api_route(
+    "/{video_id}/stream",
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+)
+async def preview_video(
+    video_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Stream video preview by catalog video ID."""
+    video = catalog_service.get_video_by_id(db=db, video_id=video_id)
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video with id {video_id} not found",
+        )
+    return await streaming_service.stream_video_preview(
+        video=video,
+        request=request,
+    )

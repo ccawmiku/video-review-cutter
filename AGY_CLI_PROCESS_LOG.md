@@ -80,4 +80,11 @@
   - 实现 `CatalogService` 递归扫描、缺失根路径跳过、安全 upsert（保留已有审核状态）以及时长倒序排列与分页。
   - 提供 `/api/videos` 与 `/api/catalog` 扫描触发、状态巡检、列表及详情查询 API。
   - 全套 22 个本地单元与集成测试通过，ruff 与 mypy 检查通过。
+- Issue #5：后端视频安全流式预览（分支：`issue-5-preview`，版本标签：`v1.3.0`）。
+  - 实现按 catalog 视频 ID 的流式预览 GET 端点（支持 `/api/videos/{video_id}/preview` 与 `/api/catalog/{video_id}/preview`，兼容 `/stream` 别名）。
+  - 支持完整 200 与单 HTTP Range 206/416 响应，正确输出 MIME、Accept-Ranges、Content-Range 与 Content-Length 头。
+  - 基于 `anyio` 异步分块流式传输，绝不对完整视频进行全量内存缓冲。
+  - 严格安全校验：基于 catalog 记录路径与配置的 `VIDEO_ROOTS`，杜绝未配置根目录逃逸、父路径穿越与符号链接逃逸（symlink escape）。
+  - 完善单元与集成测试覆盖：全量响应、有效区间、无效区间、缺失文件及路径安全边界用例。
+
 
