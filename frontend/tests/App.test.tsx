@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import App from "../src/App"
-import { VideoItem, VideoListResponse } from "../src/types/video"
+import { ClipSegment, VideoItem, VideoListResponse } from "../src/types/video"
 
 const mockVideos: VideoItem[] = [
   {
@@ -123,9 +123,30 @@ const mockVideos: VideoItem[] = [
   },
 ]
 
+let dynamicClips: Record<number, ClipSegment[]> = {}
+
 describe("Video Review Queue & Task Mode (Issue #11)", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    dynamicClips = {
+      101: [],
+      102: [],
+      103: [
+        {
+          id: 1,
+          video_id: 103,
+          start_seconds: 10,
+          end_seconds: 25,
+          duration_seconds: 15,
+          order_index: 0,
+          label: "精彩导语",
+        },
+      ],
+      104: [],
+      105: [],
+      106: [],
+    }
+
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -139,6 +160,61 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
               environment: "development",
             }),
           })
+        }
+
+        // 匹配 GET /api/videos/{id}/clips
+        const clipsMatch = url.match(/\/api\/videos\/(\d+)\/clips(?:\/(\d+))?/)
+        if (clipsMatch) {
+          const videoId = Number(clipsMatch[1])
+          const clipId = clipsMatch[2] ? Number(clipsMatch[2]) : null
+          const method = init?.method || "GET"
+
+          if (method === "GET") {
+            return Promise.resolve({
+              ok: true,
+              json: async () => dynamicClips[videoId] || [],
+            })
+          }
+
+          if (method === "POST") {
+            const body = JSON.parse(init?.body as string)
+            const newClip: ClipSegment = {
+              id: Date.now(),
+              video_id: videoId,
+              start_seconds: body.start_seconds,
+              end_seconds: body.end_seconds,
+              label: body.label || null,
+              note: body.note || null,
+              order_index: body.order_index ?? (dynamicClips[videoId]?.length || 0),
+            }
+            dynamicClips[videoId] = [...(dynamicClips[videoId] || []), newClip]
+            return Promise.resolve({
+              ok: true,
+              status: 201,
+              json: async () => newClip,
+            })
+          }
+
+          if (method === "PATCH" && clipId) {
+            const body = JSON.parse(init?.body as string)
+            const list = dynamicClips[videoId] || []
+            dynamicClips[videoId] = list.map((c) => (c.id === clipId ? { ...c, ...body } : c))
+            const updated = dynamicClips[videoId].find((c) => c.id === clipId)
+            return Promise.resolve({
+              ok: true,
+              json: async () => updated,
+            })
+          }
+
+          if (method === "DELETE" && clipId) {
+            const list = dynamicClips[videoId] || []
+            dynamicClips[videoId] = list.filter((c) => c.id !== clipId)
+            return Promise.resolve({
+              ok: true,
+              status: 204,
+              json: async () => ({}),
+            })
+          }
         }
 
         if (url.includes("/api/videos?") || url.endsWith("/api/videos")) {
@@ -174,6 +250,7 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
               ...video,
               status: body.decision,
               decision: body.decision,
+              clips: dynamicClips[videoId] || [],
             }),
           })
         }
@@ -386,6 +463,97 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/暂无符合条件的视频/i)).toBeInTheDocument()
+    })
+  })
+
+  it("integrates clip timeline editor with review queue: renders visual timeline and supports adding/editing clips", async () => {
+    render(<App />)
+
+    // 默认选中第一个视频 (101: action_movie_part1.mp4)
+    await waitFor(() => {
+      expect(screen.getByTestId("clip-timeline-editor")).toBeInTheDocument()
+      expect(screen.getByTestId("clip-visual-timeline")).toBeInTheDocument()
+      expect(screen.getByText(/暂无裁剪片段/i)).toBeInTheDocument()
+    })
+
+    // 点击添加片段
+    const addBtn = screen.getByTestId("add-clip-button")
+    fireEvent.click(addBtn)
+
+    const form = screen.getByTestId("add-clip-form")
+    expect(form).toBeInTheDocument()
+
+    // 填入时间并输入标签与备注
+    const startInput = screen.getByTestId("new-clip-start")
+    const endInput = screen.getByTestId("new-clip-end")
+    const labelInput = screen.getByTestId("new-clip-label")
+    const noteInput = screen.getByTestId("new-clip-note")
+
+    fireEvent.change(startInput, { target: { value: "5.0" } })
+    fireEvent.change(endInput, { target: { value: "20.0" } })
+    fireEvent.change(labelInput, { target: { value: "动作打斗" } })
+    fireEvent.change(noteInput, { target: { value: "高能打斗" } })
+
+    const saveBtn = screen.getByTestId("save-new-clip-button")
+    fireEvent.click(saveBtn)
+
+    // 验证片段已保存并显示在列表和时间轴上
+    await waitFor(() => {
+      expect(screen.getByText("动作打斗")).toBeInTheDocument()
+      expect(screen.getByText("5s - 20s")).toBeInTheDocument()
+      expect(screen.getByText(/1 个片段/i)).toBeInTheDocument()
+    })
+
+    // 验证提交片段已选决策按钮可用并点击提交
+    const submitClipBtn = screen.getByTestId("submit-clip-selected-btn")
+    expect(submitClipBtn).not.toBeDisabled()
+    fireEvent.click(submitClipBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/成功记录为：片段已选/i)).toBeInTheDocument()
+    })
+  })
+
+  it("supports reversible review decision: switching between no_action and clip_selected", async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId("clip-timeline-editor")).toBeInTheDocument()
+    })
+
+    // 当前视频 101 无片段，直接点击无需处理 (No action)
+    const noActionBtn = screen.getByTestId("submit-no-action-btn")
+    fireEvent.click(noActionBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/成功记录为：无需处理/i)).toBeInTheDocument()
+    })
+
+    // 可逆切换：添加 1 个片段以反转为片段已选
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    fireEvent.change(screen.getByTestId("new-clip-start"), { target: { value: "10" } })
+    fireEvent.change(screen.getByTestId("new-clip-end"), { target: { value: "30" } })
+    fireEvent.click(screen.getByTestId("save-new-clip-button"))
+
+    await waitFor(() => {
+      expect(screen.getByText("10s - 30s")).toBeInTheDocument()
+    })
+
+    // 提交片段已选以反转之前 无需处理 的决策
+    const submitClipBtn = screen.getByTestId("submit-clip-selected-btn")
+    expect(submitClipBtn).not.toBeDisabled()
+    fireEvent.click(submitClipBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/成功记录为：片段已选/i)).toBeInTheDocument()
+    })
+
+    // 再次可逆切换：清空片段并恢复为无需处理
+    const clearNoActionBtn = screen.getByTestId("clear-and-submit-no-action-btn")
+    fireEvent.click(clearNoActionBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/成功记录为：无需处理/i)).toBeInTheDocument()
     })
   })
 })

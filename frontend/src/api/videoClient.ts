@@ -2,7 +2,15 @@
  * Video review API client module.
  */
 
-import { ReviewDecision, VideoItem, VideoListResponse, VideoStatus } from "@/types/video"
+import {
+  ClipSegment,
+  ClipSegmentCreatePayload,
+  ClipSegmentUpdatePayload,
+  ReviewDecision,
+  VideoItem,
+  VideoListResponse,
+  VideoStatus,
+} from "@/types/video"
 
 export interface FetchVideosParams {
   page?: number
@@ -114,3 +122,113 @@ export async function recordDecision(
 export function getVideoPreviewUrl(baseUrl: string, videoId: number): string {
   return `${baseUrl}/api/videos/${videoId}/preview`
 }
+
+export async function fetchVideoClips(
+  baseUrl: string,
+  videoId: number
+): Promise<ClipSegment[]> {
+  const url = `${baseUrl}/api/videos/${videoId}/clips`
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`获取片段列表失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function createVideoClip(
+  baseUrl: string,
+  videoId: number,
+  payload: ClipSegmentCreatePayload
+): Promise<ClipSegment> {
+  const url = `${baseUrl}/api/videos/${videoId}/clips`
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`创建片段失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function updateVideoClip(
+  baseUrl: string,
+  videoId: number,
+  clipId: number,
+  payload: ClipSegmentUpdatePayload
+): Promise<ClipSegment> {
+  const url = `${baseUrl}/api/videos/${videoId}/clips/${clipId}`
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`更新片段失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteVideoClip(
+  baseUrl: string,
+  videoId: number,
+  clipId: number
+): Promise<void> {
+  const url = `${baseUrl}/api/videos/${videoId}/clips/${clipId}`
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`删除片段失败: ${errorDetail}`)
+  }
+}
+

@@ -3,8 +3,23 @@ import { AppShell } from "@/components/layout/AppShell"
 import { ReviewQueue } from "@/components/videos/ReviewQueue"
 import { VideoPreview } from "@/components/videos/VideoPreview"
 import { TaskModeBar } from "@/components/videos/TaskModeBar"
-import { fetchVideos, recordDecision } from "@/api/videoClient"
-import { ReviewDecision, VideoItem, VideoStatus } from "@/types/video"
+import { ClipTimelineEditor } from "@/components/videos/ClipTimelineEditor"
+import {
+  createVideoClip,
+  deleteVideoClip,
+  fetchVideoClips,
+  fetchVideos,
+  recordDecision,
+  updateVideoClip,
+} from "@/api/videoClient"
+import {
+  ClipSegment,
+  ClipSegmentCreatePayload,
+  ClipSegmentUpdatePayload,
+  ReviewDecision,
+  VideoItem,
+  VideoStatus,
+} from "@/types/video"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
 
 interface BackendHealth {
@@ -29,6 +44,12 @@ export function App() {
   const [total, setTotal] = React.useState<number>(0)
   const [totalPages, setTotalPages] = React.useState<number>(1)
   const [unprocessedTotal, setUnprocessedTotal] = React.useState<number>(0)
+
+  // 片段状态与播放同步
+  const [clips, setClips] = React.useState<ClipSegment[]>([])
+  const [isLoadingClips, setIsLoadingClips] = React.useState<boolean>(false)
+  const [seekTime, setSeekTime] = React.useState<number | null>(null)
+  const [currentPlaybackTime, setCurrentPlaybackTime] = React.useState<number | undefined>(undefined)
 
   // 加载与错误状态
   const [isLoading, setIsLoading] = React.useState<boolean>(true)
@@ -117,6 +138,166 @@ export function App() {
     void loadVideos(page, statusFilter, pageSize)
   }, [loadVideos, page, statusFilter, pageSize])
 
+  // 当选中视频变化时，从后端加载该视频的片段列表
+  React.useEffect(() => {
+    if (!selectedVideo?.id) {
+      setClips([])
+      return
+    }
+
+    let isCancelled = false
+    setIsLoadingClips(true)
+
+    fetchVideoClips(apiBaseUrl, selectedVideo.id)
+      .then((data) => {
+        if (!isCancelled) {
+          const validClips = Array.isArray(data) ? data : (selectedVideo.clips ?? [])
+          setClips(validClips)
+          // 同步到 selectedVideo.clips 及列表以便 TaskModeBar 统计
+          setSelectedVideo((prev) => (prev && prev.id === selectedVideo.id ? { ...prev, clips: validClips } : prev))
+          setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: validClips } : v)))
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setClips(selectedVideo.clips ?? [])
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingClips(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [apiBaseUrl, selectedVideo?.id, selectedVideo?.clips])
+
+  // 片段 CRUD 交互处理
+  const handleAddClip = async (payload: ClipSegmentCreatePayload) => {
+    if (!selectedVideo) return
+    const newClip = await createVideoClip(apiBaseUrl, selectedVideo.id, payload)
+    const updatedClips = [...clips, newClip].sort((a, b) => a.order_index - b.order_index)
+    setClips(updatedClips)
+    setSelectedVideo((prev) => (prev ? { ...prev, clips: updatedClips } : null))
+    setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: updatedClips } : v)))
+    setFeedbackNotice({
+      type: "success",
+      message: `已成功保存片段 #${updatedClips.length}: ${payload.label || `${payload.start_seconds}s - ${payload.end_seconds}s`}`,
+    })
+  }
+
+  const handleUpdateClip = async (clipId: number, payload: ClipSegmentUpdatePayload) => {
+    if (!selectedVideo) return
+    const updatedClip = await updateVideoClip(apiBaseUrl, selectedVideo.id, clipId, payload)
+    const updatedClips = clips
+      .map((c) => (c.id === clipId ? updatedClip : c))
+      .sort((a, b) => a.order_index - b.order_index)
+    setClips(updatedClips)
+    setSelectedVideo((prev) => (prev ? { ...prev, clips: updatedClips } : null))
+    setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: updatedClips } : v)))
+    setFeedbackNotice({
+      type: "success",
+      message: "片段修改已保存",
+    })
+  }
+
+  const handleDeleteClip = async (clipId: number) => {
+    if (!selectedVideo) return
+    await deleteVideoClip(apiBaseUrl, selectedVideo.id, clipId)
+    const updatedClips = clips.filter((c) => c.id !== clipId)
+    setClips(updatedClips)
+    setSelectedVideo((prev) => (prev ? { ...prev, clips: updatedClips } : null))
+    setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: updatedClips } : v)))
+    setFeedbackNotice({
+      type: "success",
+      message: "已成功删除片段",
+    })
+  }
+
+  const handleReorderClips = async (reordered: ClipSegment[]) => {
+    if (!selectedVideo) return
+    const withNewOrders = reordered.map((clip, index) => ({
+      ...clip,
+      order_index: index,
+    }))
+    setClips(withNewOrders)
+    setSelectedVideo((prev) => (prev ? { ...prev, clips: withNewOrders } : null))
+    setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: withNewOrders } : v)))
+
+    try {
+      await Promise.all(
+        withNewOrders.map((clip, index) => {
+          const original = clips.find((c) => c.id === clip.id)
+          if (original && original.order_index !== index) {
+            return updateVideoClip(apiBaseUrl, selectedVideo.id, clip.id, { order_index: index })
+          }
+          return Promise.resolve()
+        })
+      )
+      setFeedbackNotice({
+        type: "success",
+        message: "片段顺序已更新",
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "更新排序失败"
+      setFeedbackNotice({
+        type: "error",
+        message: `更新片段顺序失败: ${message}`,
+      })
+    }
+  }
+
+  const handleClearAllClips = async () => {
+    if (!selectedVideo || clips.length === 0) return
+    await Promise.all(clips.map((clip) => deleteVideoClip(apiBaseUrl, selectedVideo.id, clip.id)))
+    setClips([])
+    setSelectedVideo((prev) => (prev ? { ...prev, clips: [] } : null))
+    setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: [] } : v)))
+    setFeedbackNotice({
+      type: "success",
+      message: "已清空所有片段",
+    })
+  }
+
+  // 清空片段并提交无需处理决策（满足后端约束并实现可逆操作）
+  const handleClearAndRecordNoAction = async () => {
+    if (!selectedVideo) return
+    setIsSubmittingDecision(true)
+    setFeedbackNotice(null)
+    try {
+      if (clips.length > 0) {
+        await Promise.all(clips.map((clip) => deleteVideoClip(apiBaseUrl, selectedVideo.id, clip.id)))
+        setClips([])
+      }
+      const updated = await recordDecision(apiBaseUrl, selectedVideo.id, "no_action")
+      const synced: VideoItem = { ...updated, clips: [] }
+      setVideos((prev) => prev.map((item) => (item.id === synced.id ? synced : item)))
+      setSelectedVideo(synced)
+      setUnprocessedTotal((prev) => Math.max(0, prev - 1))
+      setFeedbackNotice({
+        type: "success",
+        message: `已将「${updated.filename}」成功记录为：无需处理 (No action)`,
+      })
+      if (isTaskMode) {
+        advanceToNextUnprocessed(updated.id)
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "提交决策失败"
+      setFeedbackNotice({
+        type: "error",
+        message: `决策提交失败: ${message}`,
+      })
+    } finally {
+      setIsSubmittingDecision(false)
+    }
+  }
+
+  const handleSeekVideo = (seconds: number) => {
+    setSeekTime(seconds)
+  }
+
   // 待处理视频集合（当前列表内）
   const unprocessedVideosInList = React.useMemo(() => {
     return videos.filter((v) => v.status === "unprocessed")
@@ -177,6 +358,24 @@ export function App() {
   const handleRecordDecision = async (decision: ReviewDecision) => {
     if (!selectedVideo) return
 
+    // 校验：仅在至少存在 1 个有效片段时允许提交 clip_selected
+    if (decision === "clip_selected" && clips.length === 0) {
+      setFeedbackNotice({
+        type: "error",
+        message: "无法提交「片段已选」：请至少在时间轴上添加并保存 1 个有效片段。",
+      })
+      return
+    }
+
+    // 校验：若存在片段，需提示或清空后方可标记 no_action
+    if (decision === "no_action" && clips.length > 0) {
+      setFeedbackNotice({
+        type: "error",
+        message: `无法提交「无需处理」：当前视频存在 ${clips.length} 个片段。请先清空或删除所有片段后再标记。`,
+      })
+      return
+    }
+
     setIsSubmittingDecision(true)
     setFeedbackNotice(null)
 
@@ -184,8 +383,9 @@ export function App() {
       const updated = await recordDecision(apiBaseUrl, selectedVideo.id, decision)
 
       // 更新列表内该视频状态
-      setVideos((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
-      setSelectedVideo(updated)
+      const synced: VideoItem = { ...updated, clips }
+      setVideos((prev) => prev.map((item) => (item.id === synced.id ? synced : item)))
+      setSelectedVideo(synced)
 
       // 递减待处理总数
       setUnprocessedTotal((prev) => Math.max(0, prev - 1))
@@ -315,8 +515,8 @@ export function App() {
             />
           </div>
 
-          {/* 右侧：任务模式控制台与视频播放预览 */}
-          <div className="lg:col-span-5 space-y-4 sticky top-20">
+          {/* 右侧：任务模式控制台、视频播放预览与片段时间轴编辑器 */}
+          <div className="lg:col-span-5 space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto pr-1">
             {isTaskMode && (
               <TaskModeBar
                 currentVideo={
@@ -335,7 +535,27 @@ export function App() {
             <VideoPreview
               video={selectedVideo}
               apiBaseUrl={apiBaseUrl}
+              seekTime={seekTime}
+              onTimeUpdate={setCurrentPlaybackTime}
             />
+
+            {selectedVideo && (
+              <ClipTimelineEditor
+                video={selectedVideo}
+                clips={clips}
+                isLoadingClips={isLoadingClips}
+                currentTime={currentPlaybackTime}
+                onAddClip={handleAddClip}
+                onUpdateClip={handleUpdateClip}
+                onDeleteClip={handleDeleteClip}
+                onReorderClips={handleReorderClips}
+                onDecision={handleRecordDecision}
+                onClearAndRecordNoAction={handleClearAndRecordNoAction}
+                isSubmittingDecision={isSubmittingDecision}
+                onSeekVideo={handleSeekVideo}
+                onClearAllClips={handleClearAllClips}
+              />
+            )}
           </div>
         </div>
       </div>

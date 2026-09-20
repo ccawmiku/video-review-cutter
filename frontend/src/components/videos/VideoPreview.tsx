@@ -10,9 +10,17 @@ interface VideoPreviewProps {
   video: VideoItem | null
   apiBaseUrl: string
   className?: string
+  seekTime?: number | null
+  onTimeUpdate?: (currentTime: number) => void
 }
 
-export function VideoPreview({ video, apiBaseUrl, className = "" }: VideoPreviewProps) {
+export function VideoPreview({
+  video,
+  apiBaseUrl,
+  className = "",
+  seekTime = null,
+  onTimeUpdate,
+}: VideoPreviewProps) {
   const [hasError, setHasError] = React.useState(false)
   const [retryKey, setRetryKey] = React.useState(0)
   const videoRef = React.useRef<HTMLVideoElement>(null)
@@ -20,6 +28,12 @@ export function VideoPreview({ video, apiBaseUrl, className = "" }: VideoPreview
   React.useEffect(() => {
     setHasError(false)
   }, [video?.id, retryKey])
+
+  React.useEffect(() => {
+    if (videoRef.current && seekTime != null && Number.isFinite(seekTime)) {
+      videoRef.current.currentTime = seekTime
+    }
+  }, [seekTime])
 
   if (!video) {
     return (
@@ -98,6 +112,7 @@ export function VideoPreview({ video, apiBaseUrl, className = "" }: VideoPreview
             className="h-full w-full object-contain"
             aria-label={`预览播放器: ${video.filename}`}
             onError={() => setHasError(true)}
+            onTimeUpdate={(e) => onTimeUpdate?.(e.currentTarget.currentTime)}
             data-testid="video-preview-player"
           >
             您的浏览器不支持 HTML5 video 视频预览播放。
