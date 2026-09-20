@@ -154,4 +154,3 @@ def test_clip_segment_cascade_deletion(temp_db_session: Session) -> None:
     temp_db_session.commit()
 
     assert temp_db_session.query(ClipSegment).filter(ClipSegment.video_id == video.id).count() == 0
-

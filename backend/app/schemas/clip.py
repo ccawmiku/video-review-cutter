@@ -83,9 +83,7 @@ class ClipSegmentUpdate(BaseModel):
     )
     label: str | None = Field(default=None, max_length=255, description="Updated clip label")
     note: str | None = Field(default=None, max_length=1024, description="Updated clip note")
-    order_index: int | None = Field(
-        default=None, description="Updated sequential ordering index"
-    )
+    order_index: int | None = Field(default=None, description="Updated sequential ordering index")
 
     @model_validator(mode="before")
     @classmethod

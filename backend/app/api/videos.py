@@ -216,9 +216,7 @@ def update_video_clip(
     db: Annotated[Session, Depends(get_db)],
 ) -> ClipSegmentRead:
     """Update clip segment properties and validate time range bounds."""
-    clip = clip_service.update_clip(
-        db=db, video_id=video_id, clip_id=clip_id, payload=payload
-    )
+    clip = clip_service.update_clip(db=db, video_id=video_id, clip_id=clip_id, payload=payload)
     return ClipSegmentRead.model_validate(clip)
 
 
@@ -254,8 +252,5 @@ def record_video_decision(
     db: Annotated[Session, Depends(get_db)],
 ) -> VideoRead:
     """Record explicit review decision on video with idempotence."""
-    video = clip_service.record_decision(
-        db=db, video_id=video_id, decision=payload.decision_value
-    )
+    video = clip_service.record_decision(db=db, video_id=video_id, decision=payload.decision_value)
     return VideoRead.model_validate(video)
-

@@ -59,9 +59,7 @@ class ClipService:
             )
         return clip
 
-    def create_clip(
-        self, db: Session, video_id: int, payload: ClipSegmentCreate
-    ) -> ClipSegment:
+    def create_clip(self, db: Session, video_id: int, payload: ClipSegmentCreate) -> ClipSegment:
         """Validate bounds against video duration and create clip segment."""
         video = self.get_video_or_404(db=db, video_id=video_id)
 
@@ -152,9 +150,7 @@ class ClipService:
         db.delete(clip)
         db.commit()
 
-    def record_decision(
-        self, db: Session, video_id: int, decision: DecisionType
-    ) -> Video:
+    def record_decision(self, db: Session, video_id: int, decision: DecisionType) -> Video:
         """Record explicit review decision: no_action or clip_selected.
 
         - no_action requires zero segments.
@@ -164,9 +160,7 @@ class ClipService:
         video = self.get_video_or_404(db=db, video_id=video_id)
 
         clip_count = (
-            db.query(func.count(ClipSegment.id))
-            .filter(ClipSegment.video_id == video_id)
-            .scalar()
+            db.query(func.count(ClipSegment.id)).filter(ClipSegment.video_id == video_id).scalar()
             or 0
         )
 
