@@ -1,6 +1,7 @@
 """Services package containing core domain service interfaces and implementations."""
 
 from app.services.catalog import CatalogService, catalog_service
+from app.services.clip import ClipService, clip_service
 from app.services.ffmpeg import (
     FFmpegService,
     VideoProbeInterface,
@@ -18,11 +19,13 @@ from app.services.streaming import (
 
 __all__ = [
     "CatalogService",
+    "ClipService",
     "FFmpegService",
     "RangeNotSatisfiableError",
     "StreamingService",
     "VideoProbeInterface",
     "catalog_service",
+    "clip_service",
     "ffmpeg_service",
     "guess_video_mime_type",
     "parse_probe_output",

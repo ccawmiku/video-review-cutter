@@ -13,6 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.video import VideoStatus
+from app.schemas.clip import (
+    ClipSegmentCreate,
+    ClipSegmentRead,
+    ClipSegmentUpdate,
+)
+from app.schemas.decision import VideoDecisionRequest
 from app.schemas.video import (
     ScanRequest,
     ScanStatusResponse,
@@ -21,6 +27,7 @@ from app.schemas.video import (
     VideoRead,
 )
 from app.services.catalog import catalog_service
+from app.services.clip import clip_service
 from app.services.streaming import streaming_service
 
 router = APIRouter()
@@ -145,3 +152,110 @@ async def preview_video(
         video=video,
         request=request,
     )
+
+
+@router.get(
+    "/{video_id}/clips",
+    response_model=list[ClipSegmentRead],
+    summary="List ordered clip segments for a video",
+)
+def list_video_clips(
+    video_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> list[ClipSegmentRead]:
+    """Retrieve all clip segments associated with video ordered sequentially."""
+    clips = clip_service.list_clips(db=db, video_id=video_id)
+    return [ClipSegmentRead.model_validate(clip) for clip in clips]
+
+
+@router.post(
+    "/{video_id}/clips",
+    response_model=ClipSegmentRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new clip segment for a video",
+)
+def create_video_clip(
+    video_id: int,
+    payload: ClipSegmentCreate,
+    db: Annotated[Session, Depends(get_db)],
+) -> ClipSegmentRead:
+    """Create a new clip segment validating start, end, and duration bounds."""
+    clip = clip_service.create_clip(db=db, video_id=video_id, payload=payload)
+    return ClipSegmentRead.model_validate(clip)
+
+
+@router.get(
+    "/{video_id}/clips/{clip_id}",
+    response_model=ClipSegmentRead,
+    summary="Get a specific clip segment by ID",
+)
+def get_video_clip(
+    video_id: int,
+    clip_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> ClipSegmentRead:
+    """Retrieve details of a single clip segment belonging to the video."""
+    clip = clip_service.get_clip_or_404(db=db, video_id=video_id, clip_id=clip_id)
+    return ClipSegmentRead.model_validate(clip)
+
+
+@router.put(
+    "/{video_id}/clips/{clip_id}",
+    response_model=ClipSegmentRead,
+    summary="Update an existing clip segment",
+)
+@router.patch(
+    "/{video_id}/clips/{clip_id}",
+    response_model=ClipSegmentRead,
+    include_in_schema=False,
+)
+def update_video_clip(
+    video_id: int,
+    clip_id: int,
+    payload: ClipSegmentUpdate,
+    db: Annotated[Session, Depends(get_db)],
+) -> ClipSegmentRead:
+    """Update clip segment properties and validate time range bounds."""
+    clip = clip_service.update_clip(
+        db=db, video_id=video_id, clip_id=clip_id, payload=payload
+    )
+    return ClipSegmentRead.model_validate(clip)
+
+
+@router.delete(
+    "/{video_id}/clips/{clip_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a clip segment",
+)
+def delete_video_clip(
+    video_id: int,
+    clip_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Delete a clip segment from the video."""
+    clip_service.delete_clip(db=db, video_id=video_id, clip_id=clip_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.api_route(
+    "/{video_id}/decision",
+    methods=["POST", "PUT"],
+    response_model=VideoRead,
+    summary="Record explicit review decision for a video",
+    description=(
+        "Explicitly records review decision: 'no_action' (requires 0 clip segments) "
+        "or 'clip_selected' (requires at least 1 clip segment). "
+        "Updates video status and timestamps idempotently."
+    ),
+)
+def record_video_decision(
+    video_id: int,
+    payload: VideoDecisionRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> VideoRead:
+    """Record explicit review decision on video with idempotence."""
+    video = clip_service.record_decision(
+        db=db, video_id=video_id, decision=payload.decision_value
+    )
+    return VideoRead.model_validate(video)
+
