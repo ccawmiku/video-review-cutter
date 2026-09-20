@@ -20,7 +20,7 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-class VideoStatus(str, enum.Enum):
+class VideoStatus(enum.StrEnum):
     """Workflow status values for catalog video records."""
 
     UNPROCESSED = "unprocessed"
