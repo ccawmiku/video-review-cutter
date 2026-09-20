@@ -1,8 +1,11 @@
 import * as React from "react"
 import { AppShell } from "@/components/layout/AppShell"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { FolderTree, Scissors, Archive, CheckCircle, Clock } from "lucide-react"
+import { ReviewQueue } from "@/components/videos/ReviewQueue"
+import { VideoPreview } from "@/components/videos/VideoPreview"
+import { TaskModeBar } from "@/components/videos/TaskModeBar"
+import { fetchVideos, recordDecision } from "@/api/videoClient"
+import { ReviewDecision, VideoItem, VideoStatus } from "@/types/video"
+import { AlertCircle, CheckCircle2 } from "lucide-react"
 
 interface BackendHealth {
   status: string
@@ -16,11 +19,32 @@ interface BackendHealth {
 
 export function App() {
   const [health, setHealth] = React.useState<BackendHealth | null>(null)
-  const [loading, setLoading] = React.useState<boolean>(true)
+
+  // 视频列表与分页状态
+  const [videos, setVideos] = React.useState<VideoItem[]>([])
+  const [selectedVideo, setSelectedVideo] = React.useState<VideoItem | null>(null)
+  const [statusFilter, setStatusFilter] = React.useState<VideoStatus | "all">("all")
+  const [page, setPage] = React.useState<number>(1)
+  const [pageSize, setPageSize] = React.useState<number>(20)
+  const [total, setTotal] = React.useState<number>(0)
+  const [totalPages, setTotalPages] = React.useState<number>(1)
+  const [unprocessedTotal, setUnprocessedTotal] = React.useState<number>(0)
+
+  // 加载与错误状态
+  const [isLoading, setIsLoading] = React.useState<boolean>(true)
   const [error, setError] = React.useState<string | null>(null)
+
+  // 任务模式状态
+  const [isTaskMode, setIsTaskMode] = React.useState<boolean>(false)
+  const [isSubmittingDecision, setIsSubmittingDecision] = React.useState<boolean>(false)
+  const [feedbackNotice, setFeedbackNotice] = React.useState<{
+    type: "success" | "error"
+    message: string
+  } | null>(null)
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
 
+  // 获取后端健康检查
   React.useEffect(() => {
     fetch(`${apiBaseUrl}/health`)
       .then((res) => {
@@ -29,13 +53,207 @@ export function App() {
       })
       .then((data: BackendHealth) => {
         setHealth(data)
-        setLoading(false)
       })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
+      .catch(() => {
+        // Backend offline or error handled gracefully
       })
   }, [apiBaseUrl])
+
+  // 加载待处理视频总数（用于全局任务模式指示器）
+  const loadUnprocessedCount = React.useCallback(async () => {
+    try {
+      const res = await fetchVideos(apiBaseUrl, {
+        status: "unprocessed",
+        page: 1,
+        pageSize: 1,
+      })
+      setUnprocessedTotal(res.total)
+    } catch {
+      // ignore silently for offline mode
+    }
+  }, [apiBaseUrl])
+
+  // 加载视频列表（默认按时长降序）
+  const loadVideos = React.useCallback(
+    async (currentPage = page, currentFilter = statusFilter, currentPageSize = pageSize) => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetchVideos(apiBaseUrl, {
+          page: currentPage,
+          pageSize: currentPageSize,
+          status: currentFilter,
+          sortBy: "duration",
+          order: "desc",
+        })
+
+        setVideos(response.items)
+        setTotal(response.total)
+        setTotalPages(response.total_pages || 1)
+
+        // 默认选中项逻辑
+        setSelectedVideo((prevSelected) => {
+          if (prevSelected) {
+            const fresh = response.items.find((v) => v.id === prevSelected.id)
+            if (fresh) return fresh
+          }
+          return response.items[0] ?? null
+        })
+
+        void loadUnprocessedCount()
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "获取视频失败"
+        setError(message)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [apiBaseUrl, page, statusFilter, pageSize, loadUnprocessedCount]
+  )
+
+  // 依赖项变化触发请求
+  React.useEffect(() => {
+    void loadVideos(page, statusFilter, pageSize)
+  }, [loadVideos, page, statusFilter, pageSize])
+
+  // 待处理视频集合（当前列表内）
+  const unprocessedVideosInList = React.useMemo(() => {
+    return videos.filter((v) => v.status === "unprocessed")
+  }, [videos])
+
+  // 当前选中的待处理视频在未处理集合中的序号
+  const currentUnprocessedIndex = React.useMemo(() => {
+    if (!selectedVideo) return -1
+    return unprocessedVideosInList.findIndex((v) => v.id === selectedVideo.id)
+  }, [selectedVideo, unprocessedVideosInList])
+
+  // 推进到下一个待处理视频
+  const advanceToNextUnprocessed = React.useCallback(
+    (currentId?: number) => {
+      const remaining = videos.filter((v) => v.status === "unprocessed" && v.id !== currentId)
+      if (remaining.length > 0) {
+        setSelectedVideo(remaining[0])
+      } else {
+        // 如果当前页无待处理项，检查是否可刷新或已全部完成
+        setSelectedVideo(null)
+        setFeedbackNotice({
+          type: "success",
+          message: "当前列表中已无未处理视频，审核任务已全部推进完成！",
+        })
+      }
+    },
+    [videos]
+  )
+
+  // 进入任务模式
+  const handleStartTaskMode = () => {
+    setIsTaskMode(true)
+    // 优先选中第一个待处理项
+    const firstUnprocessed = videos.find((v) => v.status === "unprocessed")
+    if (firstUnprocessed) {
+      setSelectedVideo(firstUnprocessed)
+    }
+    setFeedbackNotice(null)
+  }
+
+  // 退出任务模式
+  const handleExitTaskMode = () => {
+    setIsTaskMode(false)
+  }
+
+  // 跳过当前项
+  const handleSkipTask = () => {
+    if (!selectedVideo) return
+    const currentIdx = unprocessedVideosInList.findIndex((v) => v.id === selectedVideo.id)
+    if (currentIdx >= 0 && currentIdx < unprocessedVideosInList.length - 1) {
+      setSelectedVideo(unprocessedVideosInList[currentIdx + 1])
+    } else if (unprocessedVideosInList.length > 0) {
+      setSelectedVideo(unprocessedVideosInList[0])
+    }
+  }
+
+  // 提交审核决策 (no_action 或 clip_selected)
+  const handleRecordDecision = async (decision: ReviewDecision) => {
+    if (!selectedVideo) return
+
+    setIsSubmittingDecision(true)
+    setFeedbackNotice(null)
+
+    try {
+      const updated = await recordDecision(apiBaseUrl, selectedVideo.id, decision)
+
+      // 更新列表内该视频状态
+      setVideos((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      setSelectedVideo(updated)
+
+      // 递减待处理总数
+      setUnprocessedTotal((prev) => Math.max(0, prev - 1))
+
+      const decisionName = decision === "no_action" ? "无需处理 (No action)" : "片段已选 (Clip selected)"
+      setFeedbackNotice({
+        type: "success",
+        message: `已将「${updated.filename}」成功记录为：${decisionName}`,
+      })
+
+      // 任务模式下自动推进到下一个待处理视频
+      if (isTaskMode) {
+        advanceToNextUnprocessed(updated.id)
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "提交决策失败"
+      setFeedbackNotice({
+        type: "error",
+        message: `决策提交失败: ${message}`,
+      })
+    } finally {
+      setIsSubmittingDecision(false)
+    }
+  }
+
+  // 全局键盘快捷键（仅任务模式有效）
+  React.useEffect(() => {
+    if (!isTaskMode) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 避免在输入组件中触发快捷键
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return
+      }
+
+      if (e.key === "Escape") {
+        handleExitTaskMode()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isTaskMode])
+
+  // 筛选与分页控制处理函数
+  const handleFilterChange = (newStatus: VideoStatus | "all") => {
+    setStatusFilter(newStatus)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setPage(1)
+  }
+
+  const handleRefresh = () => {
+    void loadVideos(page, statusFilter, pageSize)
+  }
 
   return (
     <AppShell
@@ -43,142 +261,83 @@ export function App() {
       apiBaseUrl={apiBaseUrl}
     >
       <div className="space-y-6">
-        {/* 系统初始化状态卡片 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>脚手架架构状态 (Scaffold Status)</CardTitle>
-                <CardDescription>
-                  Issue #1 基础脚手架已就绪，前后端服务配置、数据存储占位与组件规范已确立。
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="border-primary/40 text-primary">
-                v0.1.0-scaffold
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-lg border p-4 bg-muted/40">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">FastAPI 后端</span>
-                  <Badge variant={health?.status === "ok" ? "success" : "secondary"}>
-                    {loading ? "检测中..." : health?.status === "ok" ? "正常运行" : "就绪"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  健康检查接口: <code className="text-[11px] font-mono">/health</code> & <code className="text-[11px] font-mono">/api/health</code>
-                </p>
-                {error && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    本地未启动后端时前端提供无缝离线界面
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-lg border p-4 bg-muted/40">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">SQLite 数据库</span>
-                  <Badge variant="outline">
-                    {health?.database?.status || "占位就绪"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  数据引擎已配置，表结构与迁移由后续 Issue 实现
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-4 bg-muted/40">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">FFmpeg 服务</span>
-                  <Badge variant="outline">
-                    {health?.ffmpeg?.status || "接口占位"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  转码、截帧与裁剪调用接口已预留，不包含流媒体处理
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 目录挂载配置说明卡片 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>存储目录规范 (Storage Mounts)</CardTitle>
-            <CardDescription>
-              环境变量中定义的三个核心目录，用于隔离只读视频源、归档产物与隔离废弃文件。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-2 p-4 rounded-lg border">
-                <div className="flex items-center gap-2 font-medium text-sm">
-                  <FolderTree className="h-4 w-4 text-blue-500" aria-hidden="true" />
-                  <code>VIDEO_ROOTS</code>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  待扫描与在线预览的源视频根目录列表（只读），支持多目录以分号分隔。
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 p-4 rounded-lg border">
-                <div className="flex items-center gap-2 font-medium text-sm">
-                  <Archive className="h-4 w-4 text-emerald-500" aria-hidden="true" />
-                  <code>ARCHIVE_DIR</code>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  裁剪后保留的精彩片段或整片归档存储目录（读写权限）。
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 p-4 rounded-lg border">
-                <div className="flex items-center gap-2 font-medium text-sm">
-                  <Scissors className="h-4 w-4 text-rose-500" aria-hidden="true" />
-                  <code>DISCARDED_DIR</code>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  初筛不合格视频的隔离移动目录（读写权限），避免误删源文件。
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 规划与边界提示 */}
-        <Card className="border-dashed">
-          <CardHeader>
+        {/* 操作反馈浮条 */}
+        {feedbackNotice && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`flex items-center justify-between gap-2 rounded-lg p-3 text-xs border ${
+              feedbackNotice.type === "success"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                : "bg-destructive/10 border-destructive/30 text-destructive dark:text-rose-300"
+            }`}
+          >
             <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-500" aria-hidden="true" />
-              <CardTitle className="text-base">后续任务范围 (Next Steps Scope)</CardTitle>
+              {feedbackNotice.type === "success" ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+              ) : (
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              )}
+              <span>{feedbackNotice.message}</span>
             </div>
-            <CardDescription>
-              遵循 Issue #1 约束：当前脚手架严格不包含视频扫描、播放流媒体、裁剪处理、文件移动或认证逻辑。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Issue #1：基础脚手架、UI 外壳、配置规范与 CI 构建已就绪</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 ml-1 mr-1" />
-                <span>后续 Issue：视频文件索引与目录递归扫描 (Video Scanning)</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 ml-1 mr-1" />
-                <span>后续 Issue：HLS/MP4 时间轴平滑播放与预览 (Video Streaming)</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 ml-1 mr-1" />
-                <span>后续 Issue：无损/重新编码裁剪处理任务队列 (Clip Processing)</span>
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
+            <button
+              onClick={() => setFeedbackNotice(null)}
+              className="font-medium underline hover:opacity-80"
+              aria-label="关闭通知"
+            >
+              关闭
+            </button>
+          </div>
+        )}
+
+        {/* 核心工作流区域：左侧队列列表，右侧任务模式与视频预览 */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* 左侧：视频审核队列 */}
+          <div className="lg:col-span-7 space-y-4">
+            <ReviewQueue
+              videos={videos}
+              selectedVideoId={selectedVideo?.id ?? null}
+              currentStatusFilter={statusFilter}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              totalPages={totalPages}
+              unprocessedCount={unprocessedTotal}
+              isLoading={isLoading}
+              error={error}
+              isTaskMode={isTaskMode}
+              onSelectVideo={(video) => setSelectedVideo(video)}
+              onFilterChange={handleFilterChange}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              onRefresh={handleRefresh}
+              onStartTaskMode={handleStartTaskMode}
+            />
+          </div>
+
+          {/* 右侧：任务模式控制台与视频播放预览 */}
+          <div className="lg:col-span-5 space-y-4 sticky top-20">
+            {isTaskMode && (
+              <TaskModeBar
+                currentVideo={
+                  selectedVideo?.status === "unprocessed" ? selectedVideo : (unprocessedVideosInList[0] ?? null)
+                }
+                unprocessedCount={unprocessedVideosInList.length}
+                currentIndex={currentUnprocessedIndex}
+                totalUnprocessed={unprocessedVideosInList.length}
+                isSubmitting={isSubmittingDecision}
+                onDecision={handleRecordDecision}
+                onSkip={handleSkipTask}
+                onExit={handleExitTaskMode}
+              />
+            )}
+
+            <VideoPreview
+              video={selectedVideo}
+              apiBaseUrl={apiBaseUrl}
+            />
+          </div>
+        </div>
       </div>
     </AppShell>
   )
