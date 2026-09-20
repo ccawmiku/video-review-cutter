@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - issue-*
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-checks:
+    name: Backend Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff mypy pytest httpx
+
+      - name: Ruff Check
+        run: ruff check .
+
+      - name: Ruff Format Check
+        run: ruff format --check .
+
+      - name: Mypy Typecheck
+        run: mypy
+
+      - name: Run Backend Tests
+        run: pytest -v
+
+  frontend-checks:
+    name: Frontend Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run Typecheck
+        run: pnpm typecheck
+
+      - name: Run Unit Tests
+        run: pnpm test
+
+      - name: Build Frontend
+        run: pnpm build
+
+  docker-build-verify:
+    name: Docker Build Verification
+    runs-on: ubuntu-latest
+    needs: [backend-checks, frontend-checks]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Container
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+
+      - name: Build Frontend Container
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
