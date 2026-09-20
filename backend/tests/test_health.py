@@ -49,7 +49,7 @@ def test_ffmpeg_service_placeholders() -> None:
     assert svc.get_version() is None
 
     test_path = Path("dummy.mp4")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FileNotFoundError):
         svc.probe_video(test_path)
 
     with pytest.raises(NotImplementedError):

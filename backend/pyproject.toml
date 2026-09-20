@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-review-cutter-backend"
-version = "1.1.0"
+version = "1.2.0"
 description = "FastAPI backend scaffold for Video Review & Cutter"
+
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -46,3 +47,5 @@ minversion = "8.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+

@@ -63,3 +63,21 @@
 - 推荐会话策略：默认新会话；只有任务强依赖已有局部上下文时才使用 `--conversation` 续窗
 - 待解决问题：待填写
 - 主代理确认：主代理负责全局架构、任务拆解和验收；任务必须原子化，禁止把几千行代码整体改造直接交给单个 CLI；Luna 负责过程记录。
+
+## 项目交付记录
+
+- 私密 GitHub 仓库：<https://github.com/ccawmiku/video-review-cutter>
+- 初始版本：`v1.0.0`
+- Issue #1 / PR #2：脚手架已完成。
+- AGY 使用策略：新窗口执行独立任务，必要时使用续接窗口。
+- 脚手架提交：`v1.1.0`
+- CI 修复提交：`v1.1.1`
+- PR #2 已通过 GitHub Actions 后合并；`main` 合并提交打标：`v1.1.2`
+- Docker 约束：本机未运行 Docker；Docker 构建验证仅通过 GitHub Actions 执行。
+- Issue #3：视频元数据目录扫描功能实现（分支：`issue-3-catalog`，版本标签：`v1.2.0`）。
+  - 实现 SQLite SQLAlchemy `Video` 模型与 `VideoStatus` 状态枚举（支持 `unprocessed`、`no_action`、`clip_selected`、`replaced`、`discarded`）。
+  - 实现可注入的 `ffprobe` 接口与探针数据容错解析器。
+  - 实现 `CatalogService` 递归扫描、缺失根路径跳过、安全 upsert（保留已有审核状态）以及时长倒序排列与分页。
+  - 提供 `/api/videos` 与 `/api/catalog` 扫描触发、状态巡检、列表及详情查询 API。
+  - 全套 22 个本地单元与集成测试通过，ruff 与 mypy 检查通过。
+
