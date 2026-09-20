@@ -35,9 +35,13 @@ class ClipSegmentBase(BaseModel):
     order_index: int = Field(default=0, description="Sequential ordering index")
 
 
-class ClipSegmentCreate(ClipSegmentBase):
+class ClipSegmentCreate(BaseModel):
     """Schema for creating a new clip segment."""
 
+    start_seconds: float = Field(description="Clip start position in seconds")
+    end_seconds: float = Field(description="Clip end position in seconds")
+    label: str | None = Field(default=None, max_length=255, description="Optional clip label")
+    note: str | None = Field(default=None, max_length=1024, description="Optional clip note")
     order_index: int | None = Field(
         default=None,
         description="Sequential ordering index (defaults to 0 or auto-assigned if omitted)",
@@ -132,7 +136,7 @@ class ClipSegmentRead(ClipSegmentBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def order(self) -> int:
         """Alias for order_index in JSON responses."""

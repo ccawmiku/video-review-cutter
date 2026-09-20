@@ -39,13 +39,13 @@ class VideoRead(VideoBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def video_id(self) -> int:
         """Alias for id."""
         return self.id
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def decision(self) -> str:
         """Workflow review decision string."""
