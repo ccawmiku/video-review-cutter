@@ -26,6 +26,9 @@ class VideoBase(BaseModel):
     bit_rate: int | None = None
     scan_error: str | None = None
     scan_metadata: dict[str, Any] | None = None
+    original_path: str | None = None
+    discarded_at: datetime | None = None
+    move_metadata: dict[str, Any] | None = None
 
 
 class VideoRead(VideoBase):
@@ -47,9 +50,21 @@ class VideoRead(VideoBase):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def current_path(self) -> str:
+        """Alias for current file path on disk."""
+        return self.path
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def decision(self) -> str:
         """Workflow review decision string."""
         return self.status.value if isinstance(self.status, VideoStatus) else str(self.status)
+
+
+class DiscardRequest(BaseModel):
+    """Optional payload for discarding a video."""
+
+    reason: str | None = Field(default=None, description="Optional note or reason for discarding")
 
 
 class VideoListResponse(BaseModel):

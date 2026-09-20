@@ -20,6 +20,7 @@ from app.schemas.clip import (
 )
 from app.schemas.decision import VideoDecisionRequest
 from app.schemas.video import (
+    DiscardRequest,
     ScanRequest,
     ScanStatusResponse,
     ScanSummary,
@@ -28,6 +29,7 @@ from app.schemas.video import (
 )
 from app.services.catalog import catalog_service
 from app.services.clip import clip_service
+from app.services.discard import discard_service
 from app.services.streaming import streaming_service
 
 router = APIRouter()
@@ -253,4 +255,26 @@ def record_video_decision(
 ) -> VideoRead:
     """Record explicit review decision on video with idempotence."""
     video = clip_service.record_decision(db=db, video_id=video_id, decision=payload.decision_value)
+    return VideoRead.model_validate(video)
+
+
+@router.api_route(
+    "/{video_id}/discard",
+    methods=["POST", "PUT"],
+    response_model=VideoRead,
+    summary="Safely move video to discarded storage and mark as discarded",
+    description=(
+        "Safely moves video file from configured VIDEO_ROOTS into DISCARDED_DIR without "
+        "deleting, avoids filename collisions deterministically, and updates status to 'discarded' "
+        "only after move verification."
+    ),
+)
+def discard_video(
+    video_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    payload: DiscardRequest | None = None,
+) -> VideoRead:
+    """Safely discard catalog video."""
+    reason = payload.reason if payload else None
+    video = discard_service.discard_video(db=db, video_id=video_id, reason=reason)
     return VideoRead.model_validate(video)

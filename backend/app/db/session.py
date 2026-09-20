@@ -63,6 +63,26 @@ def check_db_connection() -> bool:
         return False
 
 
+def migrate_schema_compatibility(target_engine=None) -> None:
+    """Ensure newly added columns exist in SQLite database if tables were pre-existing."""
+    from sqlalchemy import inspect, text
+
+    eng = target_engine or engine
+    try:
+        inspector = inspect(eng)
+        if "videos" in inspector.get_table_names():
+            columns = {col["name"] for col in inspector.get_columns("videos")}
+            with eng.begin() as conn:
+                if "original_path" not in columns:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN original_path VARCHAR(1024)"))
+                if "discarded_at" not in columns:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN discarded_at DATETIME"))
+                if "move_metadata" not in columns:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN move_metadata JSON"))
+    except Exception:
+        pass
+
+
 def init_db() -> None:
     """Initialize database tables safely on application startup."""
     _ensure_sqlite_directory()
@@ -70,3 +90,4 @@ def init_db() -> None:
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    migrate_schema_compatibility(target_engine=engine)
