@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.session import Base
+from app.models.clip import ClipSegment
 from app.models.video import Video, VideoStatus
 
 
@@ -78,3 +79,78 @@ def test_video_path_unique_constraint(temp_db_session: Session) -> None:
     temp_db_session.add(v2)
     with pytest.raises(IntegrityError):
         temp_db_session.commit()
+
+
+def test_clip_segment_model_creation_and_ordering(temp_db_session: Session) -> None:
+    """Ensure ClipSegment models link to Video, order properly, and have timestamps."""
+    video = Video(
+        path="/media/videos/clip_parent.mp4",
+        filename="clip_parent.mp4",
+        size=10000,
+        duration=60.0,
+    )
+    temp_db_session.add(video)
+    temp_db_session.commit()
+
+    c1 = ClipSegment(
+        video_id=video.id,
+        start_seconds=10.0,
+        end_seconds=20.0,
+        label="Highlight 1",
+        note="Good action",
+        order_index=1,
+    )
+    c2 = ClipSegment(
+        video_id=video.id,
+        start_seconds=0.0,
+        end_seconds=5.5,
+        label="Intro",
+        note=None,
+        order_index=0,
+    )
+    temp_db_session.add_all([c1, c2])
+    temp_db_session.commit()
+
+    # Query video and inspect relationship ordering
+    temp_db_session.expire_all()
+    saved_video = temp_db_session.query(Video).filter(Video.id == video.id).first()
+    assert saved_video is not None
+    assert len(saved_video.clips) == 2
+    # clips should be ordered by order_index: c2 (order_index=0) before c1 (order_index=1)
+    assert saved_video.clips[0].order_index == 0
+    assert saved_video.clips[0].label == "Intro"
+    assert saved_video.clips[0].start_seconds == 0.0
+    assert saved_video.clips[0].end_seconds == 5.5
+    assert isinstance(saved_video.clips[0].created_at, datetime)
+    assert isinstance(saved_video.clips[0].updated_at, datetime)
+
+    assert saved_video.clips[1].order_index == 1
+    assert saved_video.clips[1].label == "Highlight 1"
+    assert saved_video.clips[1].note == "Good action"
+
+
+def test_clip_segment_cascade_deletion(temp_db_session: Session) -> None:
+    """Ensure deleting a Video cascades and deletes all associated ClipSegments."""
+    video = Video(
+        path="/media/videos/to_delete.mp4",
+        filename="to_delete.mp4",
+        size=5000,
+        duration=30.0,
+    )
+    temp_db_session.add(video)
+    temp_db_session.commit()
+
+    clip = ClipSegment(
+        video_id=video.id,
+        start_seconds=1.0,
+        end_seconds=5.0,
+    )
+    temp_db_session.add(clip)
+    temp_db_session.commit()
+
+    assert temp_db_session.query(ClipSegment).filter(ClipSegment.video_id == video.id).count() == 1
+
+    temp_db_session.delete(video)
+    temp_db_session.commit()
+
+    assert temp_db_session.query(ClipSegment).filter(ClipSegment.video_id == video.id).count() == 0

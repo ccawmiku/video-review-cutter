@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import enum
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, BigInteger, DateTime, Float, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
+
+if TYPE_CHECKING:
+    from app.models.clip import ClipSegment
 
 
 def utc_now() -> datetime:
@@ -69,4 +72,11 @@ class Video(Base):
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
+    )
+
+    clips: Mapped[list[ClipSegment]] = relationship(
+        "ClipSegment",
+        back_populates="video",
+        cascade="all, delete-orphan",
+        order_by="[ClipSegment.order_index, ClipSegment.start_seconds, ClipSegment.id]",
     )

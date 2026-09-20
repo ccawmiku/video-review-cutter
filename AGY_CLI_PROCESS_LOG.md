@@ -85,6 +85,12 @@
   - 支持完整 200 与单 HTTP Range 206/416 响应，正确输出 MIME、Accept-Ranges、Content-Range 与 Content-Length 头。
   - 基于 `anyio` 异步分块流式传输，绝不对完整视频进行全量内存缓冲。
   - 严格安全校验：基于 catalog 记录路径与配置的 `VIDEO_ROOTS`，杜绝未配置根目录逃逸、父路径穿越与符号链接逃逸（symlink escape）。
-  - 完善单元与集成测试覆盖：全量响应、有效区间、无效区间、缺失文件及路径安全边界用例。
+- Issue #7：后端视频片段标记与显式审核决策（分支：`issue-7-clips`，版本标签：`v1.4.0`）。
+  - 实现 SQLAlchemy `ClipSegment` 模型，与 `Video` 建立级联外键与一对多有序关联，支持多段视频截取、起止秒数、可选 label/note、order_index 及 UTC 时间戳。
+  - 实现输入校验：有限非负 start_seconds、end_seconds > start_seconds，当视频已知时长存在时强校验 end_seconds <= duration。
+  - 提供 `/api/videos/{video_id}/clips` 完整的 CRUD REST 端点（支持顺序列表、创建、详情、更新、删除，兼容 `/api/catalog` 别名）。
+  - 提供 `/api/videos/{video_id}/decision` 显式审核决策端点，支持 `no_action`（要求 0 个片段）与 `clip_selected`（要求至少 1 个片段），幂等更新状态并保留审计时间戳，防止对缺失视频的非法状态迁移。
+  - 全套 39 个本地单元与集成测试全部通过，代码通过 ruff 静态检查。
+
 
 

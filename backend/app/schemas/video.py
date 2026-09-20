@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.video import VideoStatus
+from app.schemas.clip import ClipSegmentRead
 
 
 class VideoBase(BaseModel):
@@ -34,8 +35,21 @@ class VideoRead(VideoBase):
     created_at: datetime
     updated_at: datetime
     last_scanned_at: datetime
+    clips: list[ClipSegmentRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def video_id(self) -> int:
+        """Alias for id."""
+        return self.id
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def decision(self) -> str:
+        """Workflow review decision string."""
+        return self.status.value if isinstance(self.status, VideoStatus) else str(self.status)
 
 
 class VideoListResponse(BaseModel):
