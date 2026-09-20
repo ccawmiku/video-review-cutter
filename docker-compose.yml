@@ -21,8 +21,10 @@ services:
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:80"]
     volumes:
       - ./data:/app/data
-      # 挂载宿主机媒体目录：只读挂载视频源，读写挂载归档与废弃目录
-      - ${HOST_VIDEO_ROOT:-./mock_media/videos}:/media/videos:ro
+      # 挂载宿主机媒体目录：
+      # 视频源目录需要读写权限 (:rw)，因为废弃流程需要将视频文件从源目录安全移动/移除到废弃目录；
+      # 归档目录与废弃目录同样需要读写权限 (:rw)。
+      - ${HOST_VIDEO_ROOT:-./mock_media/videos}:/media/videos:rw
       - ${HOST_ARCHIVE_DIR:-./mock_media/archive}:/media/archive:rw
       - ${HOST_DISCARDED_DIR:-./mock_media/discarded}:/media/discarded:rw
 
