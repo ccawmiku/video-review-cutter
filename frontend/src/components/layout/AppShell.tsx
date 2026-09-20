@@ -36,7 +36,7 @@ export function AppShell({
             <div>
               <h1 className="text-lg font-bold tracking-tight">视频在线预览裁剪</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">
-                Video Review & Cutter · 初始架构脚手架
+                Video Review & Cutter · 视频评审队列与任务模式
               </p>
             </div>
           </div>
@@ -64,14 +64,14 @@ export function AppShell({
       </header>
 
       {/* 主要内容区域 */}
-      <main id="main-content" role="main" tabIndex={-1} className="flex-1 container mx-auto px-4 sm:px-8 py-8 focus:outline-none">
+      <main id="main-content" role="main" tabIndex={-1} className="flex-1 container mx-auto px-4 sm:px-8 py-6 focus:outline-none">
         {children}
       </main>
 
       {/* 页脚 */}
       <footer role="contentinfo" className="border-t bg-background py-6 text-center text-xs text-muted-foreground">
         <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>视频在线预览裁剪 (Video Review & Cutter) · Issue #1 Scaffold</span>
+          <span>视频在线预览裁剪 (Video Review & Cutter) · Issue #11 Review Queue</span>
           <span>FastAPI + SQLite + FFmpeg + React + Tailwind CSS</span>
         </div>
       </footer>
