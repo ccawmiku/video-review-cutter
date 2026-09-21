@@ -82,3 +82,26 @@ export interface VideoFilterOptions {
   sortBy: string
   order: "desc" | "asc"
 }
+
+export type JobStatus = "pending" | "running" | "completed" | "failed" | "cancelled"
+
+export interface ProcessingJob {
+  id: number
+  video_id: number
+  status: JobStatus
+  progress: number
+  message?: string | null
+  error?: string | null
+  strategy?: string | null
+  output_path?: string | null
+  archive_path?: string | null
+  job_metadata?: Record<string, unknown> | null
+  created_at: string
+  started_at?: string | null
+  completed_at?: string | null
+  updated_at: string
+}
+
+export interface ProcessingJobCreatePayload {
+  force_reencode?: boolean
+}

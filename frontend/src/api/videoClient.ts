@@ -6,6 +6,8 @@ import {
   ClipSegment,
   ClipSegmentCreatePayload,
   ClipSegmentUpdatePayload,
+  ProcessingJob,
+  ProcessingJobCreatePayload,
   ReviewDecision,
   VideoItem,
   VideoListResponse,
@@ -230,5 +232,114 @@ export async function deleteVideoClip(
     }
     throw new Error(`删除片段失败: ${errorDetail}`)
   }
+}
+
+export async function startVideoProcessing(
+  baseUrl: string,
+  videoId: number,
+  payload: ProcessingJobCreatePayload = {}
+): Promise<ProcessingJob> {
+  const url = `${baseUrl}/api/videos/${videoId}/process`
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`启动剪辑处理失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function fetchLatestJobForVideo(
+  baseUrl: string,
+  videoId: number
+): Promise<ProcessingJob | null> {
+  const url = `${baseUrl}/api/videos/${videoId}/jobs/latest`
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`获取最新剪辑任务状态失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function fetchJobById(
+  baseUrl: string,
+  jobId: number
+): Promise<ProcessingJob> {
+  const url = `${baseUrl}/api/jobs/${jobId}`
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`获取任务详情失败: ${errorDetail}`)
+  }
+
+  return response.json()
+}
+
+export async function cancelJob(
+  baseUrl: string,
+  jobId: number
+): Promise<ProcessingJob> {
+  const url = `${baseUrl}/api/jobs/${jobId}/cancel`
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`
+    try {
+      const errorJson = await response.json()
+      if (errorJson?.detail) errorDetail = errorJson.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(`取消任务失败: ${errorDetail}`)
+  }
+
+  return response.json()
 }
 

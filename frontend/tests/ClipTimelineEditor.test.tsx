@@ -605,4 +605,30 @@ describe("ClipTimelineEditor Component", () => {
     fireEvent.click(screen.getByTestId("edit-start-minus-30-1"))
     expect(onSeekVideo).toHaveBeenCalledWith(0) // 8 - 30 -> 0
   })
+
+  it("renders processing controls and triggers onStartProcessing when clip_selected", () => {
+    const onStartProcessing = vi.fn().mockResolvedValue(undefined)
+    const clipSelectedVideo = { ...sampleVideo, status: "clip_selected" as const }
+
+    render(
+      <ClipTimelineEditor
+        video={clipSelectedVideo}
+        clips={sampleClips}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+        onDecision={onDecision}
+        onStartProcessing={onStartProcessing}
+      />
+    )
+
+    const startBtn = screen.getByTestId("start-processing-btn")
+    expect(startBtn).toBeInTheDocument()
+    expect(startBtn).not.toBeDisabled()
+
+    fireEvent.click(startBtn)
+    expect(onStartProcessing).toHaveBeenCalledTimes(1)
+  })
 })
+
