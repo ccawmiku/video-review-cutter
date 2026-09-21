@@ -18,7 +18,6 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -324,7 +323,10 @@ class ProcessingService:
             )
 
             # Generate unique temporary output file in the original video directory
-            temp_filename = f".processing_tmp_{resolved_source.stem}_{uuid.uuid4().hex[:8]}{resolved_source.suffix}"
+            temp_filename = (
+                f".processing_tmp_{resolved_source.stem}_"
+                f"{uuid.uuid4().hex[:8]}{resolved_source.suffix}"
+            )
             temp_output = resolved_source.parent / temp_filename
             job.temp_path = str(temp_output)
             job.progress = 0.2
@@ -337,7 +339,6 @@ class ProcessingService:
                 force_reencode = bool(job.job_metadata.get("force_reencode", False))
 
             archive_dest: Path | None = None
-            orig_preserved = False
 
             try:
                 # 1. Render segments using FFmpeg runner pipeline
@@ -352,7 +353,10 @@ class ProcessingService:
 
                 job.strategy = applied_strategy
                 job.progress = 0.7
-                job.message = f"Render complete ({applied_strategy}); validating output and archiving original"
+                job.message = (
+                    f"Render complete ({applied_strategy}); "
+                    "validating output and archiving original"
+                )
                 job.updated_at = utc_now()
                 session.commit()
 
@@ -360,16 +364,19 @@ class ProcessingService:
                 if not temp_output.exists():
                     raise RuntimeError(f"Rendered temporary output does not exist: {temp_output}")
                 if not temp_output.is_file():
-                    raise RuntimeError(f"Rendered temporary output is not a regular file: {temp_output}")
+                    raise RuntimeError(
+                        f"Rendered temporary output is not a regular file: {temp_output}"
+                    )
                 if temp_output.stat().st_size == 0:
-                    raise RuntimeError(f"Rendered temporary output is empty (0 bytes): {temp_output}")
+                    raise RuntimeError(
+                        f"Rendered temporary output is empty (0 bytes): {temp_output}"
+                    )
 
                 # 3. Move original to ARCHIVE_DIR with collision-safe name
                 archive_dest = get_collision_free_destination(
                     resolved_archive_dir, resolved_source.name
                 )
                 move_strategy = move_file_safely(resolved_source, archive_dest)
-                orig_preserved = True
 
                 job.archive_path = str(archive_dest)
                 job.progress = 0.85
@@ -382,18 +389,24 @@ class ProcessingService:
                     os.replace(temp_output, resolved_source)
                 except Exception as replace_err:
                     # Rollback: restore original from archive back to source
-                    logger.error("Failed to replace original file with temp output: %s", replace_err)
+                    logger.error(
+                        "Failed to replace original file with temp output: %s",
+                        replace_err,
+                    )
                     if archive_dest.exists() and not resolved_source.exists():
                         try:
                             move_file_safely(archive_dest, resolved_source)
-                            orig_preserved = False
                         except Exception as restore_err:
-                            logger.critical("Failed to restore original file from archive: %s", restore_err)
+                            logger.critical(
+                                "Failed to restore original file from archive: %s",
+                                restore_err,
+                            )
                     raise RuntimeError(
                         f"Atomic replacement of original path failed: {replace_err}"
                     ) from replace_err
 
-                # 5. Database updates: set Video.status to replaced only after filesystem steps succeed
+                # 5. Database updates: set Video.status to replaced only after filesystem
+                # steps succeed
                 try:
                     now_done = utc_now()
                     video.status = VideoStatus.REPLACED.value
@@ -429,7 +442,10 @@ class ProcessingService:
                         if archive_dest.exists():
                             move_file_safely(archive_dest, resolved_source)
                     except Exception as rollback_fs_err:
-                        logger.critical("Failed to restore original after DB error: %s", rollback_fs_err)
+                        logger.critical(
+                            "Failed to restore original after DB error: %s",
+                            rollback_fs_err,
+                        )
                     raise RuntimeError(
                         f"Database commit failed after replacement; source restored: {db_err}"
                     ) from db_err
@@ -448,7 +464,10 @@ class ProcessingService:
                     try:
                         move_file_safely(archive_dest, resolved_source)
                     except Exception as restore_err:
-                        logger.critical("Failed to restore original during cleanup: %s", restore_err)
+                        logger.critical(
+                            "Failed to restore original during cleanup: %s",
+                            restore_err,
+                        )
 
                 # Record failed job state
                 try:
@@ -478,7 +497,11 @@ class ProcessingService:
                 detail=f"Processing job with id {job_id} not found",
             )
 
-        if job.status in (JobStatus.SUCCEEDED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value):
+        if job.status in (
+            JobStatus.SUCCEEDED.value,
+            JobStatus.FAILED.value,
+            JobStatus.CANCELLED.value,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Job #{job_id} is already '{job.status}' and cannot be cancelled",

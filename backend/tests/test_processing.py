@@ -27,6 +27,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -36,7 +37,7 @@ from app.core.config import settings
 from app.db.session import Base, get_db
 from app.main import app
 from app.models.clip import ClipSegment
-from app.models.job import JobStatus, ProcessingJob
+from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
 from app.services.ffmpeg_runner import MockFFmpegRunner
 from app.services.processing import ProcessingService, processing_service
@@ -135,14 +136,14 @@ def test_job_idempotency_duplicate_active_rejected(
     assert job1.status == JobStatus.QUEUED.value
 
     # 2. Attempt duplicate while job1 is QUEUED -> HTTP 409 Conflict
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(HTTPException) as exc_info:
         svc.create_job(db=db, video_id=video_id)
     assert "409" in str(exc_info.value) or exc_info.value.status_code == 409
 
     # 3. Transition job1 to RUNNING -> duplicate still rejected
     job1.status = JobStatus.RUNNING.value
     db.commit()
-    with pytest.raises(Exception) as exc_info2:
+    with pytest.raises(HTTPException) as exc_info2:
         svc.create_job(db=db, video_id=video_id)
     assert "409" in str(exc_info2.value) or exc_info2.value.status_code == 409
 
@@ -272,7 +273,9 @@ def test_successful_archive_and_replace_stream_copy(
     client_with_db: tuple[TestClient, sessionmaker[Session]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test full successful workflow: render, validate temp, archive original, atomically replace."""
+    """Test full successful workflow: render, validate temp, archive original,
+    atomically replace.
+    """
     _, session_factory = client_with_db
     video_root = tmp_path / "videos"
     archive_root = tmp_path / "archive"
@@ -382,7 +385,9 @@ def test_archive_collision_avoidance(
     client_with_db: tuple[TestClient, sessionmaker[Session]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test deterministic collision avoidance when destination file already exists in ARCHIVE_DIR."""
+    """Test deterministic collision avoidance when destination file already
+    exists in ARCHIVE_DIR.
+    """
     _, session_factory = client_with_db
     video_root = tmp_path / "videos"
     archive_root = tmp_path / "archive"

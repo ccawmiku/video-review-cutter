@@ -9,12 +9,11 @@ Provides injectable runner protocol and command construction for rendering video
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from app.core.config import settings
 from app.models.clip import ClipSegment
@@ -96,7 +95,10 @@ class MockFFmpegRunner:
             not self.succeed
             or (self.fail_stream_copy and is_stream_copy)
             or (self.fail_at_call_count is not None and call_index == self.fail_at_call_count)
-            or (self.fail_on_substr is not None and any(self.fail_on_substr in arg for arg in cmd_list))
+            or (
+                self.fail_on_substr is not None
+                and any(self.fail_on_substr in arg for arg in cmd_list)
+            )
         )
 
         if should_fail:
@@ -400,7 +402,9 @@ def render_segments_pipeline(
                             and output_path.exists()
                             and output_path.stat().st_size > 0
                         ):
-                            logger.info("Successfully rendered multi-segment concat using stream_copy")
+                            logger.info(
+                                "Successfully rendered multi-segment concat using stream_copy"
+                            )
                             return "stream_copy"
                 finally:
                     if chunk_dir.exists():

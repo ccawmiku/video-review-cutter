@@ -296,11 +296,12 @@ def discard_video(
     response_model=ProcessingJobRead,
     summary="Start background clip processing and archive replacement job",
     description=(
-        "Enqueues or runs a persistent processing job for the video with its validated ClipSegments. "
-        "Enforces idempotency: rejects duplicate active jobs. Renders clips in order, prefers safe "
-        "stream-copy concat with fallback to H.264/AAC re-encode, validates non-empty temp output, "
-        "safely moves original to ARCHIVE_DIR, atomically replaces original path, and updates status "
-        "to 'replaced' only upon full success."
+        "Enqueues or runs a persistent processing job for the video with its validated "
+        "ClipSegments. Enforces idempotency: rejects duplicate active jobs. "
+        "Renders clips in order, prefers safe stream-copy concat with fallback to "
+        "H.264/AAC re-encode, validates non-empty temp output, safely moves original "
+        "to ARCHIVE_DIR, atomically replaces original path, and updates status to "
+        "'replaced' only upon full success."
     ),
 )
 @router.post(
