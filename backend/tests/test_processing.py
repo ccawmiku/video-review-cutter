@@ -228,17 +228,13 @@ def test_validation_rejected_conditions(
     assert "discarded" in str(exc3.value).lower()
 
     # 4. Video without clip segments
-    v_no_clips = create_sample_video_with_clips(
-        db, video_root / "no_clips.mp4", clip_ranges=[]
-    )
+    v_no_clips = create_sample_video_with_clips(db, video_root / "no_clips.mp4", clip_ranges=[])
     with pytest.raises(Exception) as exc4:
         svc.create_job(db=db, video_id=v_no_clips.id)
     assert "no clip segments" in str(exc4.value).lower()
 
     # 5. Missing source file on disk
-    v_missing_file = create_sample_video_with_clips(
-        db, video_root / "missing_on_disk.mp4"
-    )
+    v_missing_file = create_sample_video_with_clips(db, video_root / "missing_on_disk.mp4")
     Path(v_missing_file.path).unlink(missing_ok=True)
     with pytest.raises(Exception) as exc5:
         svc.create_job(db=db, video_id=v_missing_file.id)

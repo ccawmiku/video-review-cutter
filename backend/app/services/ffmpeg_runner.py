@@ -282,28 +282,32 @@ class FFmpegCommandBuilder:
             "[outv]",
         ]
         if has_audio:
-            cmd.extend([
-                "-map",
-                "[outa]",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "22",
-                "-c:a",
-                "aac",
-            ])
+            cmd.extend(
+                [
+                    "-map",
+                    "[outa]",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "22",
+                    "-c:a",
+                    "aac",
+                ]
+            )
         else:
-            cmd.extend([
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "22",
-                "-an",
-            ])
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "22",
+                    "-an",
+                ]
+            )
         cmd.append(str(output_path))
         return cmd
 
@@ -386,9 +390,7 @@ def render_segments_pipeline(
 
                     if all_chunks_ok and len(chunk_paths) == len(sorted_segments):
                         manifest_file = chunk_dir / "concat_manifest.txt"
-                        manifest_lines = [
-                            f"file '{p.resolve().as_posix()}'" for p in chunk_paths
-                        ]
+                        manifest_lines = [f"file '{p.resolve().as_posix()}'" for p in chunk_paths]
                         manifest_file.write_text("\n".join(manifest_lines), encoding="utf-8")
 
                         concat_cmd = cmd_builder.build_concat_demuxer(

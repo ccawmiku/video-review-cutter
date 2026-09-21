@@ -402,4 +402,3 @@ def cancel_video_job(
         )
     cancelled_job = processing_service.cancel_job(db=db, job_id=job_id)
     return ProcessingJobRead.model_validate(cancelled_job)
-
