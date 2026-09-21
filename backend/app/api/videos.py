@@ -8,7 +8,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -19,6 +28,7 @@ from app.schemas.clip import (
     ClipSegmentUpdate,
 )
 from app.schemas.decision import VideoDecisionRequest
+from app.schemas.job import ProcessingJobCreate, ProcessingJobRead
 from app.schemas.video import (
     DiscardRequest,
     ScanRequest,
@@ -30,6 +40,7 @@ from app.schemas.video import (
 from app.services.catalog import catalog_service
 from app.services.clip import clip_service
 from app.services.discard import discard_service
+from app.services.processing import processing_service
 from app.services.streaming import streaming_service
 
 router = APIRouter()
@@ -278,3 +289,116 @@ def discard_video(
     reason = payload.reason if payload else None
     video = discard_service.discard_video(db=db, video_id=video_id, reason=reason)
     return VideoRead.model_validate(video)
+
+
+@router.post(
+    "/{video_id}/process",
+    response_model=ProcessingJobRead,
+    summary="Start background clip processing and archive replacement job",
+    description=(
+        "Enqueues or runs a persistent processing job for the video with its validated "
+        "ClipSegments. Enforces idempotency: rejects duplicate active jobs. "
+        "Renders clips in order, prefers safe stream-copy concat with fallback to "
+        "H.264/AAC re-encode, validates non-empty temp output, safely moves original "
+        "to ARCHIVE_DIR, atomically replaces original path, and updates status to "
+        "'replaced' only upon full success."
+    ),
+)
+@router.post(
+    "/{video_id}/jobs",
+    response_model=ProcessingJobRead,
+    include_in_schema=False,
+)
+def process_video(
+    video_id: int,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+    payload: ProcessingJobCreate | None = None,
+    background: Annotated[bool, Query(description="Run asynchronously in background")] = True,
+) -> ProcessingJobRead:
+    """Create and trigger video processing job."""
+    force_reencode = payload.force_reencode if payload else False
+    job = processing_service.create_job(
+        db=db,
+        video_id=video_id,
+        force_reencode=force_reencode,
+    )
+    if background:
+        background_tasks.add_task(processing_service.run_job, job.id)
+    else:
+        job = processing_service.run_job(job_id=job.id, db=db)
+    return ProcessingJobRead.model_validate(job)
+
+
+@router.get(
+    "/{video_id}/jobs",
+    response_model=list[ProcessingJobRead],
+    summary="List all processing jobs for a video",
+)
+def list_video_jobs(
+    video_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> list[ProcessingJobRead]:
+    """Retrieve all processing jobs for a video ordered newest first."""
+    jobs = processing_service.list_jobs_for_video(db=db, video_id=video_id)
+    return [ProcessingJobRead.model_validate(job) for job in jobs]
+
+
+@router.get(
+    "/{video_id}/jobs/latest",
+    response_model=ProcessingJobRead | None,
+    summary="Get the most recent processing job for a video",
+)
+def get_latest_video_job(
+    video_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> ProcessingJobRead | None:
+    """Retrieve the latest processing job for a video."""
+    job = processing_service.get_latest_job_for_video(db=db, video_id=video_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No processing jobs found for video {video_id}",
+        )
+    return ProcessingJobRead.model_validate(job)
+
+
+@router.get(
+    "/{video_id}/jobs/{job_id}",
+    response_model=ProcessingJobRead,
+    summary="Get details of a specific processing job",
+)
+def get_video_job(
+    video_id: int,
+    job_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> ProcessingJobRead:
+    """Retrieve a specific processing job by ID."""
+    job = processing_service.get_job(db=db, job_id=job_id)
+    if job.video_id != video_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} does not belong to video {video_id}",
+        )
+    return ProcessingJobRead.model_validate(job)
+
+
+@router.post(
+    "/{video_id}/jobs/{job_id}/cancel",
+    response_model=ProcessingJobRead,
+    summary="Cancel a pending or running processing job",
+)
+def cancel_video_job(
+    video_id: int,
+    job_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> ProcessingJobRead:
+    """Cancel a pending or running processing job."""
+    job = processing_service.get_job(db=db, job_id=job_id)
+    if job.video_id != video_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} does not belong to video {video_id}",
+        )
+    cancelled_job = processing_service.cancel_job(db=db, job_id=job_id)
+    return ProcessingJobRead.model_validate(cancelled_job)

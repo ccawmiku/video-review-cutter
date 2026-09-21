@@ -16,6 +16,7 @@ from app.db.session import Base
 
 if TYPE_CHECKING:
     from app.models.clip import ClipSegment
+    from app.models.job import ProcessingJob
 
 
 def utc_now() -> datetime:
@@ -84,6 +85,13 @@ class Video(Base):
         back_populates="video",
         cascade="all, delete-orphan",
         order_by="[ClipSegment.order_index, ClipSegment.start_seconds, ClipSegment.id]",
+    )
+
+    jobs: Mapped[list[ProcessingJob]] = relationship(
+        "ProcessingJob",
+        back_populates="video",
+        cascade="all, delete-orphan",
+        order_by="ProcessingJob.id.desc()",
     )
 
     @property

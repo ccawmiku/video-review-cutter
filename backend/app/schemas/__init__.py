@@ -10,6 +10,11 @@ from app.schemas.decision import (
     DecisionType,
     VideoDecisionRequest,
 )
+from app.schemas.job import (
+    ProcessingJobCreate,
+    ProcessingJobListResponse,
+    ProcessingJobRead,
+)
 from app.schemas.video import (
     ScanRequest,
     ScanStatusResponse,
@@ -26,6 +31,9 @@ __all__ = [
     "ClipSegmentRead",
     "ClipSegmentUpdate",
     "DecisionType",
+    "ProcessingJobCreate",
+    "ProcessingJobListResponse",
+    "ProcessingJobRead",
     "ScanRequest",
     "ScanStatusResponse",
     "ScanSummary",
