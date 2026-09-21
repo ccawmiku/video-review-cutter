@@ -28,9 +28,9 @@ jobs:
             exit 1
           fi
 
-          TAG_TYPE=$(git cat-file -t "${{ github.ref }}" 2>/dev/null || git cat-file -t "${TAG_NAME}" 2>/dev/null || echo "unknown")
+          TAG_TYPE=$(git cat-file -t "${TAG_NAME}" 2>/dev/null || echo "unknown")
           if [ "${TAG_TYPE}" != "tag" ]; then
-            echo "::error::Ref '${{ github.ref }}' is not an annotated tag (detected object type: ${TAG_TYPE})."
+            echo "::error::Tag '${TAG_NAME}' is not an annotated tag (detected object type: ${TAG_TYPE})."
             exit 1
           fi
           echo "Tag ${TAG_NAME} is a valid annotated semantic version tag."
