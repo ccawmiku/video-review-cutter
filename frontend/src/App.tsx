@@ -5,22 +5,26 @@ import { VideoPreview } from "@/components/videos/VideoPreview"
 import { TaskModeBar } from "@/components/videos/TaskModeBar"
 import { ClipTimelineEditor } from "@/components/videos/ClipTimelineEditor"
 import {
+  cancelJob,
   createVideoClip,
   deleteVideoClip,
+  fetchLatestJobForVideo,
   fetchVideoClips,
   fetchVideos,
   recordDecision,
+  startVideoProcessing,
   updateVideoClip,
 } from "@/api/videoClient"
 import {
   ClipSegment,
   ClipSegmentCreatePayload,
   ClipSegmentUpdatePayload,
+  ProcessingJob,
   ReviewDecision,
   VideoItem,
   VideoStatus,
 } from "@/types/video"
-import { AlertCircle, CheckCircle2, ChevronRight } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface BackendHealth {
@@ -65,8 +69,10 @@ export function App() {
   // 任务模式状态
   const [isTaskMode, setIsTaskMode] = React.useState<boolean>(false)
   const [isSubmittingDecision, setIsSubmittingDecision] = React.useState<boolean>(false)
+  const [latestJob, setLatestJob] = React.useState<ProcessingJob | null>(null)
+  const [isStartingProcessing, setIsStartingProcessing] = React.useState<boolean>(false)
   const [feedbackNotice, setFeedbackNotice] = React.useState<{
-    type: "success" | "error"
+    type: "success" | "error" | "info"
     message: string
   } | null>(null)
 
@@ -193,6 +199,113 @@ export function App() {
       isCancelled = true
     }
   }, [apiBaseUrl, selectedVideo?.id])
+
+  // 获取当前选中视频的最新剪辑处理任务
+  React.useEffect(() => {
+    const currentVideoId = selectedVideo?.id
+    if (!currentVideoId) {
+      setLatestJob(null)
+      return
+    }
+
+    let isCancelled = false
+    fetchLatestJobForVideo(apiBaseUrl, currentVideoId)
+      .then((job) => {
+        if (!isCancelled) {
+          setLatestJob(job)
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setLatestJob(null)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [apiBaseUrl, selectedVideo?.id])
+
+  // 轮询活跃中的剪辑任务并在完成后更新视频状态
+  React.useEffect(() => {
+    const currentVideoId = selectedVideo?.id
+    const currentFilename = selectedVideo?.filename
+    const currentJobStatus = latestJob?.status
+    if (!currentVideoId || !currentJobStatus) return
+    const isActive = currentJobStatus === "pending" || currentJobStatus === "running"
+    if (!isActive) return
+
+    const pollInterval = setInterval(() => {
+      fetchLatestJobForVideo(apiBaseUrl, currentVideoId)
+        .then((updatedJob) => {
+          if (!updatedJob) return
+          setLatestJob(updatedJob)
+
+          if (updatedJob.status === "completed") {
+            setSelectedVideo((prev) => (prev && prev.id === currentVideoId ? { ...prev, status: "replaced" } : prev))
+            setVideos((prev) => prev.map((v) => (v.id === currentVideoId ? { ...v, status: "replaced" } : v)))
+            setFeedbackNotice({
+              type: "success",
+              message: `视频「${currentFilename ?? currentVideoId}」剪辑已完成，原文件已安全归档并替换！`,
+            })
+          } else if (updatedJob.status === "failed") {
+            setFeedbackNotice({
+              type: "error",
+              message: `剪辑处理失败: ${updatedJob.error || "未知处理错误"}`,
+            })
+          }
+        })
+        .catch(() => {
+          // ignore network polling error silently
+        })
+    }, 1500)
+
+    return () => {
+      clearInterval(pollInterval)
+    }
+  }, [apiBaseUrl, selectedVideo?.id, selectedVideo?.filename, latestJob?.status])
+
+  // 启动视频剪辑处理
+  const handleStartProcessing = async () => {
+    if (!selectedVideo) return
+    setIsStartingProcessing(true)
+    setFeedbackNotice(null)
+    try {
+      const job = await startVideoProcessing(apiBaseUrl, selectedVideo.id)
+      setLatestJob(job)
+      setFeedbackNotice({
+        type: "info",
+        message: `已开始执行剪辑任务 #${job.id}，后台正在提取片段与拼接...`,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "启动剪辑任务失败"
+      setFeedbackNotice({
+        type: "error",
+        message: `启动剪辑失败: ${message}`,
+      })
+    } finally {
+      setIsStartingProcessing(false)
+    }
+  }
+
+  // 取消视频剪辑任务
+  const handleCancelProcessing = async () => {
+    if (!latestJob) return
+    try {
+      const cancelled = await cancelJob(apiBaseUrl, latestJob.id)
+      setLatestJob(cancelled)
+      setFeedbackNotice({
+        type: "info",
+        message: `已取消剪辑任务 #${cancelled.id}`,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "取消任务失败"
+      setFeedbackNotice({
+        type: "error",
+        message: `取消剪辑失败: ${message}`,
+      })
+    }
+  }
 
   // 片段 CRUD 交互处理
   const handleAddClip = async (payload: ClipSegmentCreatePayload) => {
@@ -490,12 +603,16 @@ export function App() {
             className={`flex items-center justify-between gap-2 rounded-lg p-3 text-xs border ${
               feedbackNotice.type === "success"
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                : feedbackNotice.type === "info"
+                ? "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300"
                 : "bg-destructive/10 border-destructive/30 text-destructive dark:text-rose-300"
             }`}
           >
             <div className="flex items-center gap-2">
               {feedbackNotice.type === "success" ? (
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+              ) : feedbackNotice.type === "info" ? (
+                <Info className="h-4 w-4 shrink-0 text-blue-500" />
               ) : (
                 <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
               )}
@@ -610,6 +727,10 @@ export function App() {
                 isSubmittingDecision={isSubmittingDecision}
                 onSeekVideo={handleSeekVideo}
                 onClearAllClips={handleClearAllClips}
+                latestJob={latestJob}
+                isStartingProcessing={isStartingProcessing}
+                onStartProcessing={handleStartProcessing}
+                onCancelProcessing={handleCancelProcessing}
               />
             )}
           </div>

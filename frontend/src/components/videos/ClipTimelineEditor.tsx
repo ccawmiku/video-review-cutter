@@ -1,9 +1,10 @@
 import * as React from "react"
-import { ClipSegment, ClipSegmentCreatePayload, ClipSegmentUpdatePayload, ReviewDecision, VideoItem } from "@/types/video"
+import { ClipSegment, ClipSegmentCreatePayload, ClipSegmentUpdatePayload, ProcessingJob, ReviewDecision, VideoItem } from "@/types/video"
 import { validateClipBounds } from "@/lib/clipValidation"
 import { formatDuration } from "@/lib/formatters"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ProcessingJobPanel } from "@/components/videos/ProcessingJobPanel"
 import {
   Scissors,
   Plus,
@@ -33,6 +34,10 @@ export interface ClipTimelineEditorProps {
   isSubmittingDecision?: boolean
   onSeekVideo?: (seconds: number) => void
   onClearAllClips?: () => Promise<void>
+  latestJob?: ProcessingJob | null
+  isStartingProcessing?: boolean
+  onStartProcessing?: () => Promise<void>
+  onCancelProcessing?: () => Promise<void>
   className?: string
 }
 
@@ -50,6 +55,10 @@ export function ClipTimelineEditor({
   isSubmittingDecision = false,
   onSeekVideo,
   onClearAllClips,
+  latestJob = null,
+  isStartingProcessing = false,
+  onStartProcessing,
+  onCancelProcessing,
   className = "",
 }: ClipTimelineEditorProps) {
   const clips = React.useMemo(() => (Array.isArray(rawClips) ? rawClips : []), [rawClips])
@@ -1020,6 +1029,25 @@ export function ClipTimelineEditor({
             )}
           </div>
         </div>
+
+        {/* 剪辑执行与详细任务进度卡片 */}
+        {onStartProcessing && (
+          <ProcessingJobPanel
+            job={latestJob}
+            isStarting={isStartingProcessing}
+            onStartProcessing={onStartProcessing}
+            onCancelProcessing={onCancelProcessing}
+            canStart={
+              clips.length > 0 &&
+              !isStartingProcessing &&
+              latestJob?.status !== "running" &&
+              latestJob?.status !== "pending"
+            }
+            videoStatus={video.status}
+            clipCount={clips.length}
+            className="mt-2"
+          />
+        )}
       </div>
     </section>
   )

@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import App from "../src/App"
-import { ClipSegment, VideoItem, VideoListResponse } from "../src/types/video"
+import { ClipSegment, ProcessingJob, VideoItem, VideoListResponse } from "../src/types/video"
 
 const mockVideos: VideoItem[] = [
   {
@@ -252,6 +252,32 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
               decision: body.decision,
               clips: dynamicClips[videoId] || [],
             }),
+          })
+        }
+
+        if (url.includes("/process") && init?.method === "POST") {
+          const videoId = Number(url.split("/api/videos/")[1].split("/process")[0])
+          const job: ProcessingJob = {
+            id: 201,
+            video_id: videoId,
+            status: "running",
+            progress: 0.5,
+            message: "正在提取片段并拼接...",
+            strategy: "stream_copy_concat",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => job,
+          })
+        }
+
+        if (url.includes("/jobs/latest")) {
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: async () => ({ detail: "Not found" }),
           })
         }
 
@@ -726,4 +752,33 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
     expect(player.currentTime).toBe(45.5)
     expect(pauseSpy).toHaveBeenCalled()
   })
+
+  it("provides explicit start processing button in clip_selected status, triggers POST /process, and shows job progress", async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId("clip-timeline-editor")).toBeInTheDocument()
+    })
+
+    // 选择第 3 个视频 (id: 103, status: "clip_selected")
+    fireEvent.click(screen.getByText("tutorial_intro.mp4"))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("start-processing-btn")).toBeInTheDocument()
+      expect(screen.getByTestId("start-processing-btn")).toHaveTextContent("开始剪辑与替换 (Start Processing)")
+    })
+
+    // 点击开始剪辑
+    fireEvent.click(screen.getByTestId("start-processing-btn"))
+
+    // 验证展示任务进度
+    await waitFor(() => {
+      expect(screen.getByTestId("job-status-badge")).toHaveTextContent("剪辑处理中 (Processing)")
+      expect(screen.getByTestId("job-progress-percent")).toHaveTextContent("50%")
+      expect(screen.getByTestId("job-message")).toHaveTextContent("正在提取片段并拼接...")
+      expect(screen.getByText("无损流复制快速拼接")).toBeInTheDocument()
+      expect(screen.getByTestId("processing-active-indicator")).toBeInTheDocument()
+    })
+  })
 })
+
