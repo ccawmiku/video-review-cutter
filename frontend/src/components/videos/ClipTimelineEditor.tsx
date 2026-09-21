@@ -195,17 +195,35 @@ export function ClipTimelineEditor({
     onSeekVideo?.(clickedSeconds)
   }
 
-  // 微调数字辅助函数
+  // 微调数字辅助函数：安全限制在 [0, video.duration] 内并保持校验与播放器同步
   const adjustValue = (
     currentStr: string,
     delta: number,
     setter: (val: string) => void,
     min = 0,
-    max = video.duration ?? Infinity
+    max = video.duration && video.duration > 0 ? video.duration : Infinity
   ) => {
     const current = parseFloat(currentStr) || 0
-    const next = Math.max(min, Math.min(max, Math.round((current + delta) * 10) / 10))
+    const maxBound = video.duration && video.duration > 0 ? video.duration : Infinity
+    const effectiveMax = Number.isFinite(max) ? Math.min(max, maxBound) : maxBound
+    const next = Math.max(min, Math.min(effectiveMax, Math.round((current + delta) * 10) / 10))
     setter(next.toString())
+    onSeekVideo?.(next)
+  }
+
+  const handleTimeChange = (value: string, setter: (val: string) => void) => {
+    setter(value)
+    const val = parseFloat(value)
+    if (!Number.isNaN(val) && Number.isFinite(val) && val >= 0) {
+      onSeekVideo?.(val)
+    }
+  }
+
+  const handleTimeFocus = (value: string) => {
+    const val = parseFloat(value)
+    if (!Number.isNaN(val) && Number.isFinite(val) && val >= 0) {
+      onSeekVideo?.(val)
+    }
   }
 
   const totalClipsDuration = React.useMemo(() => {
@@ -412,7 +430,8 @@ export function ClipTimelineEditor({
                   min="0"
                   max={video.duration ?? undefined}
                   value={newStart}
-                  onChange={(e) => setNewStart(e.target.value)}
+                  onFocus={() => handleTimeFocus(newStart)}
+                  onChange={(e) => handleTimeChange(e.target.value, setNewStart)}
                   className="w-full rounded border bg-background px-2.5 py-1 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   aria-label="起始时间（秒）"
                   data-testid="new-clip-start"
@@ -421,31 +440,23 @@ export function ClipTimelineEditor({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => adjustValue(newStart, -0.1, setNewStart)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="起始时间减少0.1秒"
+                  onClick={() => adjustValue(newStart, -30, setNewStart)}
+                  className="h-7 px-2 text-[10px] font-mono shrink-0"
+                  aria-label="起始时间减少30秒"
+                  data-testid="new-clip-start-minus-30"
                 >
-                  -0.1
+                  -30s
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => adjustValue(newStart, 0.1, setNewStart)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="起始时间增加0.1秒"
+                  onClick={() => adjustValue(newStart, 30, setNewStart)}
+                  className="h-7 px-2 text-[10px] font-mono shrink-0"
+                  aria-label="起始时间增加30秒"
+                  data-testid="new-clip-start-plus-30"
                 >
-                  +0.1
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => adjustValue(newStart, 1, setNewStart)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="起始时间增加1秒"
-                >
-                  +1
+                  +30s
                 </Button>
               </div>
               {newValidation.errors.start && (
@@ -472,7 +483,8 @@ export function ClipTimelineEditor({
                   min="0"
                   max={video.duration ?? undefined}
                   value={newEnd}
-                  onChange={(e) => setNewEnd(e.target.value)}
+                  onFocus={() => handleTimeFocus(newEnd)}
+                  onChange={(e) => handleTimeChange(e.target.value, setNewEnd)}
                   className="w-full rounded border bg-background px-2.5 py-1 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   aria-label="结束时间（秒）"
                   data-testid="new-clip-end"
@@ -481,31 +493,23 @@ export function ClipTimelineEditor({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => adjustValue(newEnd, -0.1, setNewEnd)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="结束时间减少0.1秒"
+                  onClick={() => adjustValue(newEnd, -30, setNewEnd)}
+                  className="h-7 px-2 text-[10px] font-mono shrink-0"
+                  aria-label="结束时间减少30秒"
+                  data-testid="new-clip-end-minus-30"
                 >
-                  -0.1
+                  -30s
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => adjustValue(newEnd, 0.1, setNewEnd)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="结束时间增加0.1秒"
+                  onClick={() => adjustValue(newEnd, 30, setNewEnd)}
+                  className="h-7 px-2 text-[10px] font-mono shrink-0"
+                  aria-label="结束时间增加30秒"
+                  data-testid="new-clip-end-plus-30"
                 >
-                  +0.1
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => adjustValue(newEnd, 1, setNewEnd)}
-                  className="h-7 w-7 p-0 text-[10px]"
-                  aria-label="结束时间增加1秒"
-                >
-                  +1
+                  +30s
                 </Button>
               </div>
               {newValidation.errors.end && (
@@ -598,7 +602,8 @@ export function ClipTimelineEditor({
                             min="0"
                             max={video.duration ?? undefined}
                             value={editStart}
-                            onChange={(e) => setEditStart(e.target.value)}
+                            onFocus={() => handleTimeFocus(editStart)}
+                            onChange={(e) => handleTimeChange(e.target.value, setEditStart)}
                             className="w-full rounded border bg-background px-2.5 py-1 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             aria-label={`编辑片段 #${index + 1} 起始时间`}
                             data-testid={`edit-start-input-${clip.id}`}
@@ -607,21 +612,23 @@ export function ClipTimelineEditor({
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => adjustValue(editStart, -0.1, setEditStart)}
-                            className="h-7 w-7 p-0 text-[10px]"
-                            aria-label="减少0.1秒"
+                            onClick={() => adjustValue(editStart, -30, setEditStart)}
+                            className="h-7 px-2 text-[10px] font-mono shrink-0"
+                            aria-label="起始时间减少30秒"
+                            data-testid={`edit-start-minus-30-${clip.id}`}
                           >
-                            -0.1
+                            -30s
                           </Button>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => adjustValue(editStart, 0.1, setEditStart)}
-                            className="h-7 w-7 p-0 text-[10px]"
-                            aria-label="增加0.1秒"
+                            onClick={() => adjustValue(editStart, 30, setEditStart)}
+                            className="h-7 px-2 text-[10px] font-mono shrink-0"
+                            aria-label="起始时间增加30秒"
+                            data-testid={`edit-start-plus-30-${clip.id}`}
                           >
-                            +0.1
+                            +30s
                           </Button>
                         </div>
                         {editValidation.errors.start && (
@@ -648,7 +655,8 @@ export function ClipTimelineEditor({
                             min="0"
                             max={video.duration ?? undefined}
                             value={editEnd}
-                            onChange={(e) => setEditEnd(e.target.value)}
+                            onFocus={() => handleTimeFocus(editEnd)}
+                            onChange={(e) => handleTimeChange(e.target.value, setEditEnd)}
                             className="w-full rounded border bg-background px-2.5 py-1 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             aria-label={`编辑片段 #${index + 1} 结束时间`}
                             data-testid={`edit-end-input-${clip.id}`}
@@ -657,21 +665,23 @@ export function ClipTimelineEditor({
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => adjustValue(editEnd, -0.1, setEditEnd)}
-                            className="h-7 w-7 p-0 text-[10px]"
-                            aria-label="减少0.1秒"
+                            onClick={() => adjustValue(editEnd, -30, setEditEnd)}
+                            className="h-7 px-2 text-[10px] font-mono shrink-0"
+                            aria-label="结束时间减少30秒"
+                            data-testid={`edit-end-minus-30-${clip.id}`}
                           >
-                            -0.1
+                            -30s
                           </Button>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => adjustValue(editEnd, 0.1, setEditEnd)}
-                            className="h-7 w-7 p-0 text-[10px]"
-                            aria-label="增加0.1秒"
+                            onClick={() => adjustValue(editEnd, 30, setEditEnd)}
+                            className="h-7 px-2 text-[10px] font-mono shrink-0"
+                            aria-label="结束时间增加30秒"
+                            data-testid={`edit-end-plus-30-${clip.id}`}
                           >
-                            +0.1
+                            +30s
                           </Button>
                         </div>
                         {editValidation.errors.end && (

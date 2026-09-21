@@ -11,6 +11,7 @@ interface VideoPreviewProps {
   apiBaseUrl: string
   className?: string
   seekTime?: number | null
+  seekNonce?: number
   onTimeUpdate?: (currentTime: number) => void
 }
 
@@ -19,6 +20,7 @@ export function VideoPreview({
   apiBaseUrl,
   className = "",
   seekTime = null,
+  seekNonce,
   onTimeUpdate,
 }: VideoPreviewProps) {
   const [hasError, setHasError] = React.useState(false)
@@ -32,8 +34,15 @@ export function VideoPreview({
   React.useEffect(() => {
     if (videoRef.current && seekTime != null && Number.isFinite(seekTime)) {
       videoRef.current.currentTime = seekTime
+      if (typeof videoRef.current.pause === "function") {
+        try {
+          videoRef.current.pause()
+        } catch {
+          // ignore playback state errors
+        }
+      }
     }
-  }, [seekTime])
+  }, [seekTime, seekNonce])
 
   if (!video) {
     return (

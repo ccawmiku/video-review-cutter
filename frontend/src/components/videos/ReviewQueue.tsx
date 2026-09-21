@@ -27,6 +27,8 @@ interface ReviewQueueProps {
   isRefreshing?: boolean
   error: string | null
   isTaskMode: boolean
+  isCollapsed?: boolean
+  onToggleCollapse?: () => void
   onSelectVideo: (video: VideoItem) => void
   onFilterChange: (status: VideoStatus | "all") => void
   onPageChange: (newPage: number) => void
@@ -57,6 +59,8 @@ export function ReviewQueue({
   isRefreshing = false,
   error,
   isTaskMode,
+  isCollapsed = false,
+  onToggleCollapse,
   onSelectVideo,
   onFilterChange,
   onPageChange,
@@ -92,6 +96,23 @@ export function ReviewQueue({
         </div>
 
         <div className="flex items-center gap-2">
+          {onToggleCollapse && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleCollapse}
+              aria-label="折叠视频审核队列"
+              aria-expanded={!isCollapsed}
+              aria-controls="review-queue-sidebar"
+              data-testid="toggle-queue-collapse-btn"
+              className="h-8 gap-1 text-xs"
+              title="折叠视频审核队列"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>收起队列</span>
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
