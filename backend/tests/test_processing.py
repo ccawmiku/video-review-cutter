@@ -658,8 +658,8 @@ def test_failure_at_db_commit_step_rollback(
     def fail_on_final_commit() -> None:
         nonlocal commit_count
         commit_count += 1
-        # Fail when updating video.status to replaced (which is the 4th/5th commit)
-        if commit_count >= 4:
+        # Fail when updating video.status to replaced (which is the 5th commit)
+        if commit_count >= 5:
             raise RuntimeError("Database locked / disk I/O error")
         real_commit()
 
