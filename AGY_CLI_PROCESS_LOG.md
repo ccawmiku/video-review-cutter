@@ -83,6 +83,22 @@
 - CI 失败时，只向 AGY 分配精确的错误修复任务，不让其重跑整套检查。
 - 只有存在未提交工作树时才开启第二个 CLI 窗口；已提交且工作树干净时不额外开窗。
 - 该协议用于避免 AGY 结束时误杀后台任务，并让检查生命周期由主代理统一控制。
+
+## 发布与调度更新
+
+- Issue #19：修复 `release.yml` 的 annotated tag 验证；由 Terra 执行小范围修复，AGY 不介入。
+- `v1.9.0` / `v1.9.1` 失败根因：工作流错误使用 `github.ref` 进行 commit 判定，而非标签本身。
+- PR #18 已合并；随后等待 Issue #19 处理。
+- PR #22 已合并；annotated tag 验证改为 GitHub REST API。
+- `v1.9.3` workflow 已验证标签，并成功构建、推送 GHCR backend/frontend 两个镜像；最初 visibility 步骤因 `GITHUB_TOKEN` 缺少 package scope 而失败，个人包仍为私有；对应创建 Issue #23 并记录手动公开设置 URL。
+- 用户授权 `delete:packages` / `write:packages` 后，两个旧 GHCR 包已删除；公开仓库重跑 `v1.9.3 Release` 成功，Actions 确认两个包均为 public 且镜像构建推送成功；Issue #23 已关闭。
+- 当前主分支干净，保持在 tag `v1.9.3`。
+
+## 用户反馈与新需求
+
+- 用户截图反馈对应三个需求：Issue #26（加载状态、单片段删除、移除标签备注）、Issue #27（折叠队列、30 秒控制、视频联动）、Issue #28（开始剪辑、详细进度）。
+- 当前按新协议仅实现 Issue #26，使用 AGY 3.8 Flash Medium；不运行长时间后台检查。
+- Sol 负责验证；Terra 后续负责重复检查。
 - Issue #3：视频元数据目录扫描功能实现（分支：`issue-3-catalog`，版本标签：`v1.2.0`）。
   - 实现 SQLite SQLAlchemy `Video` 模型与 `VideoStatus` 状态枚举（支持 `unprocessed`、`no_action`、`clip_selected`、`replaced`、`discarded`）。
   - 实现可注入的 `ffprobe` 接口与探针数据容错解析器。

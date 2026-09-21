@@ -53,7 +53,9 @@ export function App() {
 
   // 加载与错误状态
   const [isLoading, setIsLoading] = React.useState<boolean>(true)
+  const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false)
   const [error, setError] = React.useState<string | null>(null)
+  const hasLoadedRef = React.useRef<boolean>(false)
 
   // 任务模式状态
   const [isTaskMode, setIsTaskMode] = React.useState<boolean>(false)
@@ -96,8 +98,17 @@ export function App() {
 
   // 加载视频列表（默认按时长降序）
   const loadVideos = React.useCallback(
-    async (currentPage = page, currentFilter = statusFilter, currentPageSize = pageSize) => {
-      setIsLoading(true)
+    async (
+      currentPage = page,
+      currentFilter = statusFilter,
+      currentPageSize = pageSize,
+      isBackground = false
+    ) => {
+      if (isBackground || hasLoadedRef.current) {
+        setIsRefreshing(true)
+      } else {
+        setIsLoading(true)
+      }
       setError(null)
 
       try {
@@ -109,6 +120,7 @@ export function App() {
           order: "desc",
         })
 
+        hasLoadedRef.current = true
         setVideos(response.items)
         setTotal(response.total)
         setTotalPages(response.total_pages || 1)
@@ -128,6 +140,7 @@ export function App() {
         setError(message)
       } finally {
         setIsLoading(false)
+        setIsRefreshing(false)
       }
     },
     [apiBaseUrl, page, statusFilter, pageSize, loadUnprocessedCount]
@@ -140,27 +153,29 @@ export function App() {
 
   // 当选中视频变化时，从后端加载该视频的片段列表
   React.useEffect(() => {
-    if (!selectedVideo?.id) {
+    const currentVideoId = selectedVideo?.id
+    if (!currentVideoId) {
       setClips([])
+      setIsLoadingClips(false)
       return
     }
 
     let isCancelled = false
     setIsLoadingClips(true)
 
-    fetchVideoClips(apiBaseUrl, selectedVideo.id)
+    fetchVideoClips(apiBaseUrl, currentVideoId)
       .then((data) => {
         if (!isCancelled) {
-          const validClips = Array.isArray(data) ? data : (selectedVideo.clips ?? [])
+          const validClips = Array.isArray(data) ? data : []
           setClips(validClips)
           // 同步到 selectedVideo.clips 及列表以便 TaskModeBar 统计
-          setSelectedVideo((prev) => (prev && prev.id === selectedVideo.id ? { ...prev, clips: validClips } : prev))
-          setVideos((prev) => prev.map((v) => (v.id === selectedVideo.id ? { ...v, clips: validClips } : v)))
+          setSelectedVideo((prev) => (prev && prev.id === currentVideoId ? { ...prev, clips: validClips } : prev))
+          setVideos((prev) => prev.map((v) => (v.id === currentVideoId ? { ...v, clips: validClips } : v)))
         }
       })
       .catch(() => {
         if (!isCancelled) {
-          setClips(selectedVideo.clips ?? [])
+          setClips([])
         }
       })
       .finally(() => {
@@ -172,7 +187,7 @@ export function App() {
     return () => {
       isCancelled = true
     }
-  }, [apiBaseUrl, selectedVideo?.id, selectedVideo?.clips])
+  }, [apiBaseUrl, selectedVideo?.id])
 
   // 片段 CRUD 交互处理
   const handleAddClip = async (payload: ClipSegmentCreatePayload) => {
@@ -452,7 +467,7 @@ export function App() {
   }
 
   const handleRefresh = () => {
-    void loadVideos(page, statusFilter, pageSize)
+    void loadVideos(page, statusFilter, pageSize, true)
   }
 
   return (
@@ -504,6 +519,7 @@ export function App() {
               totalPages={totalPages}
               unprocessedCount={unprocessedTotal}
               isLoading={isLoading}
+              isRefreshing={isRefreshing}
               error={error}
               isTaskMode={isTaskMode}
               onSelectVideo={(video) => setSelectedVideo(video)}

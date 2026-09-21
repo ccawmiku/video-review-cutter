@@ -14,8 +14,6 @@ import {
   CheckCheck,
   RotateCcw,
   Clock,
-  Tag,
-  FileText,
   HelpCircle,
   Loader2,
   SlidersHorizontal,
@@ -61,8 +59,6 @@ export function ClipTimelineEditor({
   const [editingClipId, setEditingClipId] = React.useState<number | null>(null)
   const [editStart, setEditStart] = React.useState<string>("")
   const [editEnd, setEditEnd] = React.useState<string>("")
-  const [editLabel, setEditLabel] = React.useState<string>("")
-  const [editNote, setEditNote] = React.useState<string>("")
   const [isSavingEdit, setIsSavingEdit] = React.useState<boolean>(false)
 
   // 新增片段表单状态
@@ -71,8 +67,6 @@ export function ClipTimelineEditor({
   const [newEnd, setNewEnd] = React.useState<string>(
     video.duration ? Math.min(10, video.duration).toString() : "10"
   )
-  const [newLabel, setNewLabel] = React.useState<string>("")
-  const [newNote, setNewNote] = React.useState<string>("")
   const [isCreating, setIsCreating] = React.useState<boolean>(false)
   const [showClearConfirm, setShowClearConfirm] = React.useState<boolean>(false)
 
@@ -110,8 +104,6 @@ export function ClipTimelineEditor({
 
     setNewStart(startVal.toString())
     setNewEnd(endVal.toString())
-    setNewLabel("")
-    setNewNote("")
     setIsAdding(true)
   }
 
@@ -123,13 +115,11 @@ export function ClipTimelineEditor({
       await onAddClip({
         start_seconds: newStartNum,
         end_seconds: newEndNum,
-        label: newLabel.trim() || null,
-        note: newNote.trim() || null,
+        label: null,
+        note: null,
         order_index: clips.length,
       })
       setIsAdding(false)
-      setNewLabel("")
-      setNewNote("")
     } finally {
       setIsCreating(false)
     }
@@ -141,8 +131,6 @@ export function ClipTimelineEditor({
     setSelectedClipId(clip.id)
     setEditStart(clip.start_seconds.toString())
     setEditEnd(clip.end_seconds.toString())
-    setEditLabel(clip.label || "")
-    setEditNote(clip.note || "")
   }
 
   // 提交编辑
@@ -150,16 +138,28 @@ export function ClipTimelineEditor({
     if (editingClipId == null || !editValidation.isValid) return
     setIsSavingEdit(true)
     try {
+      const currentClip = clips.find((c) => c.id === editingClipId)
       await onUpdateClip(editingClipId, {
         start_seconds: editStartNum,
         end_seconds: editEndNum,
-        label: editLabel.trim() || null,
-        note: editNote.trim() || null,
+        label: currentClip?.label ?? null,
+        note: currentClip?.note ?? null,
       })
       setEditingClipId(null)
     } finally {
       setIsSavingEdit(false)
     }
+  }
+
+  // 单片段删除处理（同时清除对应编辑或选中状态，确保仅删除目标单一片段）
+  const handleDeleteSingleClip = async (clipId: number) => {
+    if (selectedClipId === clipId) {
+      setSelectedClipId(null)
+    }
+    if (editingClipId === clipId) {
+      setEditingClipId(null)
+    }
+    await onDeleteClip(clipId)
   }
 
   // 取消编辑
@@ -240,6 +240,24 @@ export function ClipTimelineEditor({
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedClipId !== null && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleDeleteSingleClip(selectedClipId)
+              }}
+              className="h-8 gap-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+              aria-label="删除选中的片段"
+              data-testid="delete-selected-clip-btn"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>删除选中片段</span>
+            </Button>
+          )}
+
           {!isAdding && (
             <Button
               variant="default"
@@ -496,50 +514,6 @@ export function ClipTimelineEditor({
                 </p>
               )}
             </div>
-
-            {/* 标签 */}
-            <div className="space-y-1">
-              <label
-                htmlFor="new-clip-label-input"
-                className="text-xs font-medium text-foreground flex items-center gap-1"
-              >
-                <Tag className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                标签 (可选)
-              </label>
-              <input
-                id="new-clip-label-input"
-                type="text"
-                placeholder="例如：精彩镜头、开头导语"
-                value={newLabel}
-                maxLength={255}
-                onChange={(e) => setNewLabel(e.target.value)}
-                className="w-full rounded border bg-background px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                aria-label="片段标签"
-                data-testid="new-clip-label"
-              />
-            </div>
-
-            {/* 备注 */}
-            <div className="space-y-1">
-              <label
-                htmlFor="new-clip-note-input"
-                className="text-xs font-medium text-foreground flex items-center gap-1"
-              >
-                <FileText className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                备注 (可选)
-              </label>
-              <input
-                id="new-clip-note-input"
-                type="text"
-                placeholder="例如：保留该段动作剪辑"
-                value={newNote}
-                maxLength={1024}
-                onChange={(e) => setNewNote(e.target.value)}
-                className="w-full rounded border bg-background px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                aria-label="片段备注"
-                data-testid="new-clip-note"
-              />
-            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-1 border-t">
@@ -706,48 +680,6 @@ export function ClipTimelineEditor({
                           </p>
                         )}
                       </div>
-
-                      {/* 编辑标签 */}
-                      <div className="space-y-1">
-                        <label
-                          htmlFor={`edit-clip-label-${clip.id}`}
-                          className="text-xs font-medium text-foreground flex items-center gap-1"
-                        >
-                          <Tag className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                          标签 (可选)
-                        </label>
-                        <input
-                          id={`edit-clip-label-${clip.id}`}
-                          type="text"
-                          value={editLabel}
-                          maxLength={255}
-                          onChange={(e) => setEditLabel(e.target.value)}
-                          className="w-full rounded border bg-background px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          aria-label={`编辑片段 #${index + 1} 标签`}
-                          data-testid={`edit-label-input-${clip.id}`}
-                        />
-                      </div>
-
-                      {/* 编辑备注 */}
-                      <div className="space-y-1">
-                        <label
-                          htmlFor={`edit-clip-note-${clip.id}`}
-                          className="text-xs font-medium text-foreground flex items-center gap-1"
-                        >
-                          <FileText className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                          备注 (可选)
-                        </label>
-                        <input
-                          id={`edit-clip-note-${clip.id}`}
-                          type="text"
-                          value={editNote}
-                          maxLength={1024}
-                          onChange={(e) => setEditNote(e.target.value)}
-                          className="w-full rounded border bg-background px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          aria-label={`编辑片段 #${index + 1} 备注`}
-                          data-testid={`edit-note-input-${clip.id}`}
-                        />
-                      </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-1 border-t">
@@ -780,8 +712,22 @@ export function ClipTimelineEditor({
               return (
                 <li
                   key={clip.id}
-                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg border transition-colors ${
-                    isSelected ? "bg-accent/60 border-primary/40 shadow-sm" : "bg-card hover:bg-accent/30"
+                  role="button"
+                  tabIndex={0}
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setSelectedClipId(clip.id)
+                    onSeekVideo?.(clip.start_seconds)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      setSelectedClipId(clip.id)
+                      onSeekVideo?.(clip.start_seconds)
+                    }
+                  }}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                    isSelected ? "bg-accent/60 border-primary ring-1 ring-primary/40 shadow-sm" : "bg-card hover:bg-accent/30"
                   }`}
                   data-testid={`clip-segment-item-${clip.id}`}
                 >
@@ -798,6 +744,11 @@ export function ClipTimelineEditor({
                         <span className="text-[11px] text-muted-foreground font-mono">
                           (时长: {Math.round((clip.end_seconds - clip.start_seconds) * 10) / 10}s)
                         </span>
+                        {isSelected && (
+                          <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-primary text-primary-foreground">
+                            已选中
+                          </Badge>
+                        )}
                         {clip.label && (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                             {clip.label}
@@ -819,7 +770,10 @@ export function ClipTimelineEditor({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => onSeekVideo(clip.start_seconds)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSeekVideo(clip.start_seconds)
+                        }}
                         className="h-7 w-7 p-0"
                         title="定位到片段起点"
                         aria-label={`定位到片段 #${index + 1} 起点`}
@@ -832,7 +786,10 @@ export function ClipTimelineEditor({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleStartEdit(clip)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleStartEdit(clip)
+                      }}
                       className="h-7 px-2 text-xs"
                       aria-label={`编辑片段 #${index + 1}`}
                       data-testid={`edit-clip-button-${clip.id}`}
@@ -845,7 +802,10 @@ export function ClipTimelineEditor({
                       variant="ghost"
                       size="sm"
                       disabled={index === 0}
-                      onClick={() => handleMoveUp(index)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleMoveUp(index)
+                      }}
                       className="h-7 w-7 p-0"
                       title="上移片段"
                       aria-label={`上移片段 #${index + 1}`}
@@ -859,7 +819,10 @@ export function ClipTimelineEditor({
                       variant="ghost"
                       size="sm"
                       disabled={index === clips.length - 1}
-                      onClick={() => handleMoveDown(index)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleMoveDown(index)
+                      }}
                       className="h-7 w-7 p-0"
                       title="下移片段"
                       aria-label={`下移片段 #${index + 1}`}
@@ -872,7 +835,10 @@ export function ClipTimelineEditor({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => onDeleteClip(clip.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleDeleteSingleClip(clip.id)
+                      }}
                       className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                       title="删除片段"
                       aria-label={`删除片段 #${index + 1}`}

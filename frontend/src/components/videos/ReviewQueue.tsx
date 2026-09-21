@@ -24,6 +24,7 @@ interface ReviewQueueProps {
   totalPages: number
   unprocessedCount: number
   isLoading: boolean
+  isRefreshing?: boolean
   error: string | null
   isTaskMode: boolean
   onSelectVideo: (video: VideoItem) => void
@@ -53,6 +54,7 @@ export function ReviewQueue({
   totalPages,
   unprocessedCount,
   isLoading,
+  isRefreshing = false,
   error,
   isTaskMode,
   onSelectVideo,
@@ -94,19 +96,23 @@ export function ReviewQueue({
             variant="outline"
             size="sm"
             onClick={onRefresh}
-            disabled={isLoading}
+            disabled={isLoading || isRefreshing}
             className="h-8 gap-1 text-xs"
             aria-label="刷新视频列表"
+            data-testid="refresh-videos-button"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-            <span>刷新</span>
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isRefreshing || (isLoading && videos.length === 0) ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            <span>{isRefreshing ? "刷新中..." : "刷新"}</span>
           </Button>
 
           <Button
             variant={isTaskMode ? "secondary" : "default"}
             size="sm"
             onClick={onStartTaskMode}
-            disabled={unprocessedCount === 0 || isLoading}
+            disabled={unprocessedCount === 0 || isLoading || isRefreshing}
             className="h-8 gap-1.5 text-xs font-medium"
             aria-label={
               unprocessedCount === 0
@@ -148,11 +154,12 @@ export function ReviewQueue({
 
       {/* 列表主体内容：加载、错误、空状态与数据列表 */}
       <div className="min-h-[320px]">
-        {isLoading ? (
+        {isLoading && videos.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center p-12 text-center"
             role="status"
             aria-live="polite"
+            data-testid="initial-loading-state"
           >
             <RefreshCw className="h-8 w-8 animate-spin text-primary mb-2" aria-hidden="true" />
             <p className="text-sm font-medium text-foreground">正在加载视频列表...</p>
@@ -160,7 +167,7 @@ export function ReviewQueue({
               通过 GET /api/videos 获取排序后的视频目录
             </p>
           </div>
-        ) : error ? (
+        ) : error && videos.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center"
             role="alert"
@@ -177,7 +184,7 @@ export function ReviewQueue({
               重新重试
             </Button>
           </div>
-        ) : videos.length === 0 ? (
+        ) : !isLoading && !isRefreshing && videos.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center rounded-lg border border-dashed p-10 text-center bg-muted/20"
             role="status"
@@ -201,11 +208,42 @@ export function ReviewQueue({
             )}
           </div>
         ) : (
-          <ul
-            className="divide-y rounded-lg border bg-background"
-            role="list"
-            aria-label="视频条目列表"
-          >
+          <div className="space-y-3">
+            {/* 后台刷新提示条（保持列表可见） */}
+            {isRefreshing && (
+              <div
+                className="flex items-center justify-center gap-2 rounded-lg bg-muted/60 border p-2 text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+                data-testid="refreshing-indicator"
+              >
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
+                <span>正在后台刷新视频目录...</span>
+              </div>
+            )}
+
+            {/* 刷新错误提示条（保持列表可见） */}
+            {error && (
+              <div
+                className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
+                role="alert"
+                data-testid="refresh-error-banner"
+              >
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                  <span>刷新失败: {error}</span>
+                </div>
+                <Button variant="outline" size="sm" onClick={onRefresh} className="h-6 text-[11px]">
+                  重试
+                </Button>
+              </div>
+            )}
+
+            <ul
+              className="divide-y rounded-lg border bg-background"
+              role="list"
+              aria-label="视频条目列表"
+            >
             {videos.map((video) => {
               const isSelected = selectedVideoId === video.id
               return (
@@ -258,6 +296,7 @@ export function ReviewQueue({
               )
             })}
           </ul>
+        </div>
         )}
       </div>
 
@@ -287,7 +326,7 @@ export function ReviewQueue({
             variant="outline"
             size="sm"
             onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1 || isLoading}
+            disabled={page <= 1 || isLoading || isRefreshing}
             className="h-8 gap-1 text-xs"
             aria-label="上一页"
           >
@@ -299,7 +338,7 @@ export function ReviewQueue({
             variant="outline"
             size="sm"
             onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages || isLoading}
+            disabled={page >= totalPages || isLoading || isRefreshing}
             className="h-8 gap-1 text-xs"
             aria-label="下一页"
           >
