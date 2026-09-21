@@ -89,6 +89,37 @@ volumes:
 
 ---
 
+## GHCR 容器镜像拉取与发布规范
+
+### 镜像拉取命令
+
+GitHub Container Registry (GHCR) 上发布的前后端容器镜像完整拉取命令如下：
+
+```bash
+# 后端镜像拉取 (将 <tag> 替换为具体发布的版本标签，如 v1.9.0)
+docker pull ghcr.io/ccawmiku/video-review-cutter-backend:<tag>
+
+# 前端镜像拉取 (将 <tag> 替换为具体发布的版本标签，如 v1.9.0)
+docker pull ghcr.io/ccawmiku/video-review-cutter-frontend:<tag>
+```
+
+以版本 `v1.9.0` 为例：
+
+```bash
+docker pull ghcr.io/ccawmiku/video-review-cutter-backend:v1.9.0
+docker pull ghcr.io/ccawmiku/video-review-cutter-frontend:v1.9.0
+```
+
+### 镜像发布机制说明
+
+- **发布途径**：镜像构建与发布**仅在 GitHub Actions 持续集成自动化工作流中执行**（禁止在本地运行 Docker 进行构建或发布）。
+- **触发条件**：仅在推送符合 `vMAJOR.MINOR.PATCH` 格式的带附注语义化版本标签（Annotated Semantic Version Tag，例如 `v1.9.0`）时触发发布工作流。
+- **标签策略**：仅发布与 `github.ref_name` 完全匹配的显式版本标签，**绝不发布** `latest`、`stable`、`edge` 或 `nightly` 等别名标签。
+- **PR CI 隔离**：Pull Request CI 构建仅执行容器构建验证（`push: false`），绝不向镜像仓库推送任何未发布的镜像。
+
+
+---
+
 ## 本地开发与测试指南
 
 ### 1. 后端 (FastAPI)
@@ -156,7 +187,8 @@ pnpm dev
 video-review-cutter/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitHub Actions CI 工作流 (Lint/Test/Typecheck/Docker Build)
+│       ├── ci.yml             # GitHub Actions CI 工作流 (Lint/Test/Typecheck/Docker Build)
+│       └── release.yml        # GitHub Actions 发布工作流 (构建并推送 GHCR 镜像)
 ├── .env.example               # 环境变量配置模板
 ├── .gitignore                 # 安全忽略规则 (防泄露/忽略媒体、环境、缓存)
 ├── AGY_CLI_PROCESS_LOG.md     # 过程日志文件 (保留完整)
