@@ -20,7 +20,8 @@ import {
   VideoItem,
   VideoStatus,
 } from "@/types/video"
-import { AlertCircle, CheckCircle2 } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface BackendHealth {
   status: string
@@ -49,7 +50,11 @@ export function App() {
   const [clips, setClips] = React.useState<ClipSegment[]>([])
   const [isLoadingClips, setIsLoadingClips] = React.useState<boolean>(false)
   const [seekTime, setSeekTime] = React.useState<number | null>(null)
+  const [seekNonce, setSeekNonce] = React.useState<number>(0)
   const [currentPlaybackTime, setCurrentPlaybackTime] = React.useState<number | undefined>(undefined)
+
+  // 侧边栏折叠状态
+  const [isQueueCollapsed, setIsQueueCollapsed] = React.useState<boolean>(false)
 
   // 加载与错误状态
   const [isLoading, setIsLoading] = React.useState<boolean>(true)
@@ -311,6 +316,7 @@ export function App() {
 
   const handleSeekVideo = (seconds: number) => {
     setSeekTime(seconds)
+    setSeekNonce((prev) => prev + 1)
   }
 
   // 待处理视频集合（当前列表内）
@@ -505,10 +511,13 @@ export function App() {
           </div>
         )}
 
-        {/* 核心工作流区域：左侧队列列表，右侧任务模式与视频预览 */}
+        {/* 核心工作流区域：左侧队列列表（可折叠侧边栏），右侧任务模式与视频预览 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* 左侧：视频审核队列 */}
-          <div className="lg:col-span-7 space-y-4">
+          <div
+            id="review-queue-sidebar"
+            className={`${isQueueCollapsed ? "hidden" : "lg:col-span-5"} space-y-4`}
+          >
             <ReviewQueue
               videos={videos}
               selectedVideoId={selectedVideo?.id ?? null}
@@ -522,6 +531,8 @@ export function App() {
               isRefreshing={isRefreshing}
               error={error}
               isTaskMode={isTaskMode}
+              isCollapsed={isQueueCollapsed}
+              onToggleCollapse={() => setIsQueueCollapsed((prev) => !prev)}
               onSelectVideo={(video) => setSelectedVideo(video)}
               onFilterChange={handleFilterChange}
               onPageChange={handlePageChange}
@@ -531,8 +542,36 @@ export function App() {
             />
           </div>
 
-          {/* 右侧：任务模式控制台、视频播放预览与片段时间轴编辑器 */}
-          <div className="lg:col-span-5 space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto pr-1">
+          {/* 右侧：任务模式控制台、视频播放预览与片段时间轴编辑器（主内容区） */}
+          <div
+            className={`${
+              isQueueCollapsed ? "lg:col-span-12" : "lg:col-span-7"
+            } space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto pr-1`}
+            data-testid="main-content-area"
+          >
+            {isQueueCollapsed && (
+              <div className="flex items-center justify-between bg-card border rounded-lg p-2.5 px-3 shadow-sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsQueueCollapsed(false)}
+                  aria-label="展开视频审核队列"
+                  aria-expanded={false}
+                  aria-controls="review-queue-sidebar"
+                  data-testid="toggle-queue-collapse-btn"
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  <span>展开评审队列 (共 {total} 部 · 待处理 {unprocessedTotal} 部)</span>
+                </Button>
+                {selectedVideo && (
+                  <span className="text-xs text-muted-foreground truncate ml-2">
+                    当前视频: <span className="font-mono text-foreground font-medium">{selectedVideo.filename}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
             {isTaskMode && (
               <TaskModeBar
                 currentVideo={
@@ -552,6 +591,7 @@ export function App() {
               video={selectedVideo}
               apiBaseUrl={apiBaseUrl}
               seekTime={seekTime}
+              seekNonce={seekNonce}
               onTimeUpdate={setCurrentPlaybackTime}
             />
 

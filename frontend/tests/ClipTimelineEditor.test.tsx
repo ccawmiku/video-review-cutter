@@ -119,9 +119,13 @@ describe("ClipTimelineEditor Component", () => {
     expect(startInput).toHaveAttribute("step", "0.1")
     expect(endInput).toHaveAttribute("type", "number")
 
-    // 测试步进微调按钮
-    const plusStepBtn = within(form).getByRole("button", { name: "起始时间增加1秒" })
-    fireEvent.click(plusStepBtn)
+    // 测试步进微调按钮（+/-30秒控制）
+    const plusStepBtn = within(form).getByRole("button", { name: "起始时间增加30秒" })
+    expect(plusStepBtn).toBeInTheDocument()
+    const minusStepBtn = within(form).getByRole("button", { name: "起始时间减少30秒" })
+    expect(minusStepBtn).toBeInTheDocument()
+    fireEvent.click(minusStepBtn) // 35 - 30 = 5s
+    expect(startInput).toHaveValue(5)
 
     // 验证标签与备注输入框已从 UI 中彻底移除
     expect(screen.queryByTestId("new-clip-label")).not.toBeInTheDocument()
@@ -455,5 +459,150 @@ describe("ClipTimelineEditor Component", () => {
     expect(screen.queryByText("加载片段列表中...")).not.toBeInTheDocument()
     expect(screen.getByTestId("clip-segment-item-1")).toBeInTheDocument()
     expect(screen.getByTestId("clip-segment-item-2")).toBeInTheDocument()
+  })
+
+  it("supports +/-30s nudge controls in add and edit forms and clamps safely to [0, duration]", async () => {
+    render(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={sampleClips}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+        onDecision={onDecision}
+        onSeekVideo={onSeekVideo}
+      />
+    )
+
+    // 1. 测试新增片段表单中的 +/-30s 控件与边界钳位 (sampleVideo.duration = 60.0)
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    const startInput = screen.getByTestId("new-clip-start")
+    const endInput = screen.getByTestId("new-clip-end")
+
+    const startMinus30 = screen.getByTestId("new-clip-start-minus-30")
+    const startPlus30 = screen.getByTestId("new-clip-start-plus-30")
+    const endMinus30 = screen.getByTestId("new-clip-end-minus-30")
+    const endPlus30 = screen.getByTestId("new-clip-end-plus-30")
+
+    // 起始值默认为 35（sampleClips 中最大 end_seconds 为 35）
+    // 增加 30s：35 + 30 = 65，应安全限制在上限 60
+    fireEvent.click(startPlus30)
+    expect(startInput).toHaveValue(60)
+
+    // 减少 30s 两次：60 -> 30 -> 0，第三次应钳位在下限 0
+    fireEvent.click(startMinus30)
+    expect(startInput).toHaveValue(30)
+    fireEvent.click(startMinus30)
+    expect(startInput).toHaveValue(0)
+    fireEvent.click(startMinus30)
+    expect(startInput).toHaveValue(0)
+
+    // 结束时间增加 30s 并钳位在 60
+    fireEvent.change(endInput, { target: { value: "45" } })
+    fireEvent.click(endPlus30)
+    expect(endInput).toHaveValue(60)
+
+    // 结束时间减少 30s 两次钳位在 0，并触发合法性校验错误
+    fireEvent.click(endMinus30)
+    expect(endInput).toHaveValue(30)
+    fireEvent.click(endMinus30)
+    expect(endInput).toHaveValue(0)
+    expect(screen.getByText(/结束时间必须严格大于起始时间/i)).toBeInTheDocument()
+
+    // 2. 测试编辑片段表单中的 +/-30s 控件与边界钳位
+    fireEvent.click(screen.getByText("取消")) // 关闭新增表单
+    fireEvent.click(screen.getByTestId("edit-clip-button-1")) // 编辑片段 #1 (start: 5, end: 15)
+
+    const editStart = screen.getByTestId("edit-start-input-1")
+    const editEnd = screen.getByTestId("edit-end-input-1")
+    const editStartMinus30 = screen.getByTestId("edit-start-minus-30-1")
+    const editStartPlus30 = screen.getByTestId("edit-start-plus-30-1")
+    const editEndMinus30 = screen.getByTestId("edit-end-minus-30-1")
+    const editEndPlus30 = screen.getByTestId("edit-end-plus-30-1")
+
+    // 5 - 30 = -25 -> 钳位至 0
+    fireEvent.click(editStartMinus30)
+    expect(editStart).toHaveValue(0)
+
+    // 0 + 30 = 30
+    fireEvent.click(editStartPlus30)
+    expect(editStart).toHaveValue(30)
+
+    // 15 + 30 = 45; 再加 30 = 75 -> 钳位至 60
+    fireEvent.click(editEndPlus30)
+    expect(editEnd).toHaveValue(45)
+    fireEvent.click(editEndPlus30)
+    expect(editEnd).toHaveValue(60)
+
+    // 60 - 30 = 30; 再减 30 = 0 -> 钳位至 0
+    fireEvent.click(editEndMinus30)
+    expect(editEnd).toHaveValue(30)
+    fireEvent.click(editEndMinus30)
+    expect(editEnd).toHaveValue(0)
+    expect(screen.getByText(/结束时间必须严格大于起始时间/i)).toBeInTheDocument()
+  })
+
+  it("calls onSeekVideo when focusing, editing, or nudging start and end times in add and edit forms", () => {
+    render(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={sampleClips}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+        onDecision={onDecision}
+        onSeekVideo={onSeekVideo}
+      />
+    )
+
+    // 1. 新增表单测试
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    const startInput = screen.getByTestId("new-clip-start")
+    const endInput = screen.getByTestId("new-clip-end")
+
+    // 获得焦点时触发定位
+    fireEvent.focus(startInput)
+    expect(onSeekVideo).toHaveBeenCalledWith(35)
+
+    // 输入值变更时触发定位
+    fireEvent.change(startInput, { target: { value: "12.5" } })
+    expect(onSeekVideo).toHaveBeenCalledWith(12.5)
+
+    // 结束时间获得焦点与变更
+    fireEvent.focus(endInput)
+    expect(onSeekVideo).toHaveBeenCalledWith(45)
+    fireEvent.change(endInput, { target: { value: "28.0" } })
+    expect(onSeekVideo).toHaveBeenCalledWith(28.0)
+
+    // 步进微调按钮触发定位
+    fireEvent.click(screen.getByTestId("new-clip-start-plus-30"))
+    expect(onSeekVideo).toHaveBeenCalledWith(42.5) // 12.5 + 30 = 42.5
+
+    // 2. 编辑表单测试
+    fireEvent.click(screen.getByText("取消"))
+    fireEvent.click(screen.getByTestId("edit-clip-button-1"))
+
+    const editStart = screen.getByTestId("edit-start-input-1")
+    const editEnd = screen.getByTestId("edit-end-input-1")
+
+    // 焦点触发
+    fireEvent.focus(editStart)
+    expect(onSeekVideo).toHaveBeenCalledWith(5.0)
+
+    // 编辑触发
+    fireEvent.change(editStart, { target: { value: "8.0" } })
+    expect(onSeekVideo).toHaveBeenCalledWith(8.0)
+
+    // 结束时间焦点与编辑
+    fireEvent.focus(editEnd)
+    expect(onSeekVideo).toHaveBeenCalledWith(15.0)
+    fireEvent.change(editEnd, { target: { value: "22.5" } })
+    expect(onSeekVideo).toHaveBeenCalledWith(22.5)
+
+    // 微调触发
+    fireEvent.click(screen.getByTestId("edit-start-minus-30-1"))
+    expect(onSeekVideo).toHaveBeenCalledWith(0) // 8 - 30 -> 0
   })
 })

@@ -640,4 +640,90 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
       expect(screen.getByText("1 个片段")).toBeInTheDocument()
     })
   })
+
+  it("makes review queue collapsible like a sidebar with accessible toggle, expanding preview/timeline to main area while preserving selected video state", async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "折叠视频审核队列" })).toBeInTheDocument()
+      expect(screen.getByTestId("video-preview-player")).toHaveAttribute("src", "/api/videos/101/preview")
+    })
+
+    const sidebar = document.getElementById("review-queue-sidebar")
+    const mainArea = screen.getByTestId("main-content-area")
+    expect(sidebar).not.toHaveClass("hidden")
+    expect(mainArea).toHaveClass("lg:col-span-7")
+
+    // 点击收起队列折叠侧边栏
+    const collapseBtn = screen.getByRole("button", { name: "折叠视频审核队列" })
+    expect(collapseBtn).toHaveAttribute("aria-expanded", "true")
+    fireEvent.click(collapseBtn)
+
+    // 验证侧边栏已隐藏，主内容区域占据全部宽度 (lg:col-span-12)
+    expect(sidebar).toHaveClass("hidden")
+    expect(mainArea).toHaveClass("lg:col-span-12")
+
+    // 验证选中的视频状态保持完好
+    const player = screen.getByTestId("video-preview-player")
+    expect(player).toHaveAttribute("src", "/api/videos/101/preview")
+    expect(screen.getAllByText("action_movie_part1.mp4").length).toBeGreaterThan(0)
+
+    // 验证展开按钮具有可访问属性并可重新展开侧边栏
+    const expandBtn = screen.getByRole("button", { name: "展开视频审核队列" })
+    expect(expandBtn).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(expandBtn)
+
+    // 验证侧边栏恢复可见，主内容区恢复标准布局
+    expect(sidebar).not.toHaveClass("hidden")
+    expect(mainArea).toHaveClass("lg:col-span-7")
+    expect(player).toHaveAttribute("src", "/api/videos/101/preview")
+  })
+
+  it("seeks video and pauses player when focusing or editing clip start/end timestamps or using nudge buttons", async () => {
+    const pauseSpy = vi.spyOn(window.HTMLMediaElement.prototype, "pause")
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId("clip-timeline-editor")).toBeInTheDocument()
+      expect(screen.getByTestId("video-preview-player")).toBeInTheDocument()
+    })
+
+    const player = screen.getByTestId("video-preview-player") as HTMLVideoElement
+
+    // 打开添加片段表单
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    const startInput = screen.getByTestId("new-clip-start")
+    const endInput = screen.getByTestId("new-clip-end")
+
+    // 1. 获得焦点触发 seek 和 pause
+    pauseSpy.mockClear()
+    fireEvent.focus(startInput)
+    expect(player.currentTime).toBe(0)
+    expect(pauseSpy).toHaveBeenCalled()
+
+    // 2. 编辑起始时间触发 seek 和 pause
+    pauseSpy.mockClear()
+    fireEvent.change(startInput, { target: { value: "15.5" } })
+    expect(player.currentTime).toBe(15.5)
+    expect(pauseSpy).toHaveBeenCalled()
+
+    // 3. 获得结束时间焦点并编辑
+    pauseSpy.mockClear()
+    fireEvent.focus(endInput)
+    expect(player.currentTime).toBe(10)
+    expect(pauseSpy).toHaveBeenCalled()
+
+    pauseSpy.mockClear()
+    fireEvent.change(endInput, { target: { value: "40.0" } })
+    expect(player.currentTime).toBe(40.0)
+    expect(pauseSpy).toHaveBeenCalled()
+
+    // 4. 点击 +/-30s 微调按钮触发 seek 和 pause
+    pauseSpy.mockClear()
+    const startPlus30 = screen.getByTestId("new-clip-start-plus-30")
+    fireEvent.click(startPlus30) // 15.5 + 30 = 45.5
+    expect(player.currentTime).toBe(45.5)
+    expect(pauseSpy).toHaveBeenCalled()
+  })
 })
