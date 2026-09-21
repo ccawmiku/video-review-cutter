@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    name: Build & Publish GHCR Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Validate annotated semantic version tag
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          echo "Validating tag: ${TAG_NAME}"
+          if [[ ! "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '${TAG_NAME}' does not match required semantic version pattern vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+          TAG_TYPE=$(git cat-file -t "${{ github.ref }}" 2>/dev/null || git cat-file -t "${TAG_NAME}" 2>/dev/null || echo "unknown")
+          if [ "${TAG_TYPE}" != "tag" ]; then
+            echo "::error::Ref '${{ github.ref }}' is not an annotated tag (detected object type: ${TAG_TYPE})."
+            exit 1
+          fi
+          echo "Tag ${TAG_NAME} is a valid annotated semantic version tag."
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata for Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5.6.1
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/video-review-cutter-backend
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+
+      - name: Build and push Backend image
+        id: build-backend
+        uses: docker/build-push-action@v5.4.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+
+      - name: Extract Docker metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5.6.1
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/video-review-cutter-frontend
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+
+      - name: Build and push Frontend image
+        id: build-frontend
+        uses: docker/build-push-action@v5.4.0
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+
+      - name: Add Job Summary
+        run: |
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          ## GHCR Release Images
+
+          | Component | Image Reference |
+          | :--- | :--- |
+          EOF
+          echo "| **Backend** | \`${{ steps.meta-backend.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend** | \`${{ steps.meta-frontend.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+
+          - **Commit SHA:** \`${{ github.sha }}\`
+          - **Release Tag:** \`${{ github.ref_name }}\`
+          EOF
+
+      - name: Attempt to set package visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          PACKAGES=("video-review-cutter-backend" "video-review-cutter-frontend")
+
+          get_visibility() {
+            local pkg="$1"
+            local vis=""
+            vis=$(gh api "/user/packages/container/${pkg}" --jq '.visibility' 2>/dev/null || true)
+            if [ -z "$vis" ]; then
+              vis=$(gh api "/users/${OWNER_LOWER}/packages/container/${pkg}" --jq '.visibility' 2>/dev/null || true)
+            fi
+            if [ -z "$vis" ]; then
+              vis=$(gh api "/orgs/${OWNER_LOWER}/packages/container/${pkg}" --jq '.visibility' 2>/dev/null || true)
+            fi
+            echo "$vis"
+          }
+
+          for PKG in "${PACKAGES[@]}"; do
+            echo "------------------------------------------------------------"
+            echo "Checking visibility for package: ${PKG}"
+            CURRENT_VISIBILITY=$(get_visibility "${PKG}")
+            echo "Current visibility for ${PKG}: '${CURRENT_VISIBILITY:-unknown}'"
+
+            if [ "$CURRENT_VISIBILITY" = "public" ]; then
+              echo "Package ${PKG} is already public."
+              continue
+            fi
+
+            echo "Attempting to update package ${PKG} visibility to public via GitHub REST API..."
+            HTTP_STATUS=$(curl -s -o /tmp/resp_${PKG}.json -w "%{http_code}" -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user/packages/container/${PKG}" \
+              -d '{"visibility":"public"}')
+
+            if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+              HTTP_STATUS=$(curl -s -o /tmp/resp_${PKG}.json -w "%{http_code}" -X PATCH \
+                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/orgs/${OWNER_LOWER}/packages/container/${PKG}" \
+                -d '{"visibility":"public"}')
+            fi
+
+            sleep 2
+            UPDATED_VISIBILITY=$(get_visibility "${PKG}")
+
+            if [ "$UPDATED_VISIBILITY" != "public" ]; then
+              echo "::error::Failed to set GHCR package '${PKG}' visibility to public. GitHub API returned HTTP status ${HTTP_STATUS} (current visibility: '${UPDATED_VISIBILITY:-unknown}'). GITHUB_TOKEN or repository policy prevents automated package visibility modification."
+              echo ""
+              echo "=========================================================================================="
+              echo "ACTION REQUIRED: Manual intervention needed to set package visibility to public."
+              echo "GitHub prevents automated visibility modification for container packages under default"
+              echo "GITHUB_TOKEN permissions or repository privacy policies."
+              echo ""
+              echo "Please perform the following steps in GitHub web interface:"
+              echo "1. Navigate to: https://github.com/users/${OWNER}/packages/container/package/${PKG}/settings"
+              echo "   (or https://github.com/orgs/${OWNER}/packages/container/package/${PKG}/settings)"
+              echo "2. Scroll down to the 'Danger Zone' section."
+              echo "3. Click 'Change visibility'."
+              echo "4. Select 'Public' and type the package name to confirm."
+              echo "=========================================================================================="
+              exit 1
+            else
+              echo "Package ${PKG} is confirmed public."
+            fi
+          done
