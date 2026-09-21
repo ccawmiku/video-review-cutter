@@ -63,7 +63,7 @@ export function App() {
     message: string
   } | null>(null)
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || ""
 
   // 获取后端健康检查
   React.useEffect(() => {

@@ -11,7 +11,7 @@ interface AppShellProps {
 export function AppShell({
   children,
   backendStatus = "connected",
-  apiBaseUrl = "http://localhost:8000",
+  apiBaseUrl = "",
 }: AppShellProps) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -45,7 +45,7 @@ export function AppShell({
           <nav aria-label="系统与服务状态" className="flex items-center gap-3">
             <div className="hidden md:flex items-center text-xs text-muted-foreground gap-1.5 mr-2">
               <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>API: <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">{apiBaseUrl}</code></span>
+              <span>API: <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">{apiBaseUrl || "/"}</code></span>
             </div>
 
             {backendStatus === "connected" ? (

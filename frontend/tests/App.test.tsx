@@ -311,7 +311,7 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
       expect(videoPlayer).toBeInTheDocument()
       expect(videoPlayer).toHaveAttribute(
         "src",
-        "http://localhost:8000/api/videos/101/preview"
+        "/api/videos/101/preview"
       )
       expect(videoPlayer).toHaveAttribute("controls")
     })
@@ -360,7 +360,7 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
       const videoPlayer = screen.getByTestId("video-preview-player")
       expect(videoPlayer).toHaveAttribute(
         "src",
-        "http://localhost:8000/api/videos/106/preview"
+        "/api/videos/106/preview"
       )
     })
   })
