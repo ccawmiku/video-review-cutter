@@ -123,11 +123,9 @@ describe("ClipTimelineEditor Component", () => {
     const plusStepBtn = within(form).getByRole("button", { name: "起始时间增加1秒" })
     fireEvent.click(plusStepBtn)
 
-    // 输入标签和备注
-    const labelInput = screen.getByTestId("new-clip-label")
-    const noteInput = screen.getByTestId("new-clip-note")
-    fireEvent.change(labelInput, { target: { value: "新加高光" } })
-    fireEvent.change(noteInput, { target: { value: "测试备注" } })
+    // 验证标签与备注输入框已从 UI 中彻底移除
+    expect(screen.queryByTestId("new-clip-label")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("new-clip-note")).not.toBeInTheDocument()
 
     // 保存片段
     const saveBtn = screen.getByTestId("save-new-clip-button")
@@ -138,8 +136,8 @@ describe("ClipTimelineEditor Component", () => {
       expect(onAddClip).toHaveBeenCalledTimes(1)
       expect(onAddClip).toHaveBeenCalledWith(
         expect.objectContaining({
-          label: "新加高光",
-          note: "测试备注",
+          label: null,
+          note: null,
         })
       )
     })
@@ -186,7 +184,7 @@ describe("ClipTimelineEditor Component", () => {
     expect(saveBtn).not.toBeDisabled()
   })
 
-  it("edits an existing segment and saves changes via PATCH", async () => {
+  it("edits an existing segment and saves changes via PATCH (without label/note inputs)", async () => {
     render(
       <ClipTimelineEditor
         video={sampleVideo}
@@ -208,11 +206,13 @@ describe("ClipTimelineEditor Component", () => {
 
     const editStart = screen.getByTestId("edit-start-input-1")
     const editEnd = screen.getByTestId("edit-end-input-1")
-    const editLabel = screen.getByTestId("edit-label-input-1")
+
+    // 确认编辑界面中已移除标签和备注输入框
+    expect(screen.queryByTestId("edit-label-input-1")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("edit-note-input-1")).not.toBeInTheDocument()
 
     fireEvent.change(editStart, { target: { value: "6.5" } })
     fireEvent.change(editEnd, { target: { value: "18.0" } })
-    fireEvent.change(editLabel, { target: { value: "修改后的片头" } })
 
     const saveEditBtn = screen.getByTestId("save-edit-button-1")
     fireEvent.click(saveEditBtn)
@@ -221,7 +221,7 @@ describe("ClipTimelineEditor Component", () => {
       expect(onUpdateClip).toHaveBeenCalledWith(1, {
         start_seconds: 6.5,
         end_seconds: 18.0,
-        label: "修改后的片头",
+        label: "精彩片头",
         note: "镜头快速切换",
       })
     })
@@ -352,5 +352,108 @@ describe("ClipTimelineEditor Component", () => {
     const playBtn = screen.getByRole("button", { name: /定位到片段 #2 起点/i })
     fireEvent.click(playBtn)
     expect(onSeekVideo).toHaveBeenCalledWith(20.0)
+  })
+
+  it("allows selecting a segment and deleting only the selected segment via the header button without deleting all segments", async () => {
+    render(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={sampleClips}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+        onDecision={onDecision}
+        onSeekVideo={onSeekVideo}
+        onClearAllClips={onClearAllClips}
+      />
+    )
+
+    // 初始状态下未选中任何片段，不显示“删除选中片段”按钮
+    expect(screen.queryByTestId("delete-selected-clip-btn")).not.toBeInTheDocument()
+
+    // 点击列表中的片段 #1 进行选中
+    const clipItem1 = screen.getByTestId("clip-segment-item-1")
+    fireEvent.click(clipItem1)
+
+    // 验证高亮选中状态及头部出现的“删除选中片段”按钮
+    expect(within(clipItem1).getByText("已选中")).toBeInTheDocument()
+    const deleteSelectedBtn = screen.getByTestId("delete-selected-clip-btn")
+    expect(deleteSelectedBtn).toBeInTheDocument()
+
+    // 点击删除选中片段
+    fireEvent.click(deleteSelectedBtn)
+
+    // 验证仅调用 onDeleteClip(1)，绝不调用 onClearAllClips
+    expect(onDeleteClip).toHaveBeenCalledTimes(1)
+    expect(onDeleteClip).toHaveBeenCalledWith(1)
+    expect(onClearAllClips).not.toHaveBeenCalled()
+  })
+
+  it("allows selecting a segment via timeline marker and deleting it via row delete button without deleting other segments", async () => {
+    render(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={sampleClips}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+        onDecision={onDecision}
+        onSeekVideo={onSeekVideo}
+        onClearAllClips={onClearAllClips}
+      />
+    )
+
+    // 点击时间轴片段 #2 的 marker 进行选中与定位
+    const marker2 = screen.getByTestId("timeline-marker-2")
+    fireEvent.click(marker2)
+    expect(onSeekVideo).toHaveBeenCalledWith(20.0)
+
+    const clipItem2 = screen.getByTestId("clip-segment-item-2")
+    expect(within(clipItem2).getByText("已选中")).toBeInTheDocument()
+
+    // 点击片段 #2 单独的删除按钮
+    const deleteRowBtn = screen.getByTestId("delete-clip-2")
+    fireEvent.click(deleteRowBtn)
+
+    // 验证只删除了片段 #2
+    expect(onDeleteClip).toHaveBeenCalledTimes(1)
+    expect(onDeleteClip).toHaveBeenCalledWith(2)
+    expect(onClearAllClips).not.toHaveBeenCalled()
+  })
+
+  it("renders clip loading state when isLoadingClips is true and switches to clips list when done", () => {
+    const { rerender } = render(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={[]}
+        isLoadingClips={true}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+      />
+    )
+
+    expect(screen.getByText("加载片段列表中...")).toBeInTheDocument()
+    expect(screen.queryByTestId("no-clips-placeholder")).not.toBeInTheDocument()
+
+    // 加载完成后切换为正常状态
+    rerender(
+      <ClipTimelineEditor
+        video={sampleVideo}
+        clips={sampleClips}
+        isLoadingClips={false}
+        onAddClip={onAddClip}
+        onUpdateClip={onUpdateClip}
+        onDeleteClip={onDeleteClip}
+        onReorderClips={onReorderClips}
+      />
+    )
+
+    expect(screen.queryByText("加载片段列表中...")).not.toBeInTheDocument()
+    expect(screen.getByTestId("clip-segment-item-1")).toBeInTheDocument()
+    expect(screen.getByTestId("clip-segment-item-2")).toBeInTheDocument()
   })
 })

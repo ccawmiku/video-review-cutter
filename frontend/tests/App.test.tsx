@@ -483,23 +483,20 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
     const form = screen.getByTestId("add-clip-form")
     expect(form).toBeInTheDocument()
 
-    // 填入时间并输入标签与备注
+    // 填入时间（标签与备注输入框已移除）
     const startInput = screen.getByTestId("new-clip-start")
     const endInput = screen.getByTestId("new-clip-end")
-    const labelInput = screen.getByTestId("new-clip-label")
-    const noteInput = screen.getByTestId("new-clip-note")
+    expect(screen.queryByTestId("new-clip-label")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("new-clip-note")).not.toBeInTheDocument()
 
     fireEvent.change(startInput, { target: { value: "5.0" } })
     fireEvent.change(endInput, { target: { value: "20.0" } })
-    fireEvent.change(labelInput, { target: { value: "动作打斗" } })
-    fireEvent.change(noteInput, { target: { value: "高能打斗" } })
 
     const saveBtn = screen.getByTestId("save-new-clip-button")
     fireEvent.click(saveBtn)
 
     // 验证片段已保存并显示在列表和时间轴上
     await waitFor(() => {
-      expect(screen.getByText("动作打斗")).toBeInTheDocument()
       expect(screen.getByText("5s - 20s")).toBeInTheDocument()
       expect(screen.getByText(/1 个片段/i)).toBeInTheDocument()
     })
@@ -554,6 +551,93 @@ describe("Video Review Queue & Task Mode (Issue #11)", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/成功记录为：无需处理/i)).toBeInTheDocument()
+    })
+  })
+
+  it("keeps existing catalog visible and shows refreshing indicator when refreshing videos in background without replacing with empty state", async () => {
+    render(<App />)
+
+    // 等待初始加载完成并展示视频列表
+    await waitFor(() => {
+      expect(screen.getAllByText("action_movie_part1.mp4").length).toBeGreaterThan(0)
+    })
+
+    // 点击刷新按钮
+    const refreshBtn = screen.getByTestId("refresh-videos-button")
+    fireEvent.click(refreshBtn)
+
+    // 验证在刷新进行中及之后，现有视频目录始终保持可见，且绝不会被空状态替换
+    expect(screen.getAllByText("action_movie_part1.mp4").length).toBeGreaterThan(0)
+    expect(screen.queryByTestId("initial-loading-state")).not.toBeInTheDocument()
+    expect(screen.queryByText("暂无符合条件的视频")).not.toBeInTheDocument()
+
+    // 等待刷新完成
+    await waitFor(() => {
+      expect(screen.getByText("刷新")).toBeInTheDocument()
+    })
+  })
+
+  it("finishes loading clips without getting stuck on 加载片段列表中 when switching selected videos", async () => {
+    render(<App />)
+
+    // 初始视频 101 加载完成，确认加载状态消失且显示暂无片段
+    await waitFor(() => {
+      expect(screen.queryByText("加载片段列表中...")).not.toBeInTheDocument()
+      expect(screen.getByText(/暂无裁剪片段/i)).toBeInTheDocument()
+    })
+
+    // 切换选中视频到 103 (tutorial_intro.mp4，包含 1 个片段)
+    const video103Btn = screen.getByRole("button", {
+      name: /选择视频 tutorial_intro\.mp4/i,
+    })
+    fireEvent.click(video103Btn)
+
+    // 验证片段列表加载完成，展示对应片段，绝不处于“加载片段列表中...”的永久卡死状态
+    await waitFor(() => {
+      expect(screen.queryByText("加载片段列表中...")).not.toBeInTheDocument()
+      expect(screen.getByText("10s - 25s")).toBeInTheDocument()
+    })
+  })
+
+  it("allows selecting and deleting a single saved clip without deleting other clips", async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId("clip-timeline-editor")).toBeInTheDocument()
+    })
+
+    // 为视频 101 添加第 1 个片段 (5s - 15s)
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    fireEvent.change(screen.getByTestId("new-clip-start"), { target: { value: "5.0" } })
+    fireEvent.change(screen.getByTestId("new-clip-end"), { target: { value: "15.0" } })
+    fireEvent.click(screen.getByTestId("save-new-clip-button"))
+
+    await waitFor(() => {
+      expect(screen.getByText("5s - 15s")).toBeInTheDocument()
+      expect(screen.getByText("1 个片段")).toBeInTheDocument()
+    })
+
+    // 为视频 101 添加第 2 个片段 (20s - 30s)
+    fireEvent.click(screen.getByTestId("add-clip-button"))
+    fireEvent.change(screen.getByTestId("new-clip-start"), { target: { value: "20.0" } })
+    fireEvent.change(screen.getByTestId("new-clip-end"), { target: { value: "30.0" } })
+    fireEvent.click(screen.getByTestId("save-new-clip-button"))
+
+    await waitFor(() => {
+      expect(screen.getByText("20s - 30s")).toBeInTheDocument()
+      expect(screen.getByText("2 个片段")).toBeInTheDocument()
+    })
+
+    // 单独删除第 1 个片段
+    const deleteBtn1 = screen.getByRole("button", { name: "删除片段 #1" })
+    fireEvent.click(deleteBtn1)
+
+    // 验证成功反馈、第 1 个片段被移除，而第 2 个片段 (20s - 30s) 依然完好保留，未删除全部片段
+    await waitFor(() => {
+      expect(screen.getByText("已成功删除片段")).toBeInTheDocument()
+      expect(screen.queryByText("5s - 15s")).not.toBeInTheDocument()
+      expect(screen.getByText("20s - 30s")).toBeInTheDocument()
+      expect(screen.getByText("1 个片段")).toBeInTheDocument()
     })
   })
 })
