@@ -22,8 +22,8 @@ services:
     volumes:
       - ./data:/app/data
       # 挂载宿主机媒体目录：
-      # 视频源目录需要读写权限 (:rw)，因为废弃流程需要将视频文件从源目录安全移动/移除到废弃目录；
-      # 归档目录与废弃目录同样需要读写权限 (:rw)。
+      # 视频源目录需要读写权限 (:rw)，用于视频废弃移动以及剪辑处理与归档替换工作流（生成临时渲染文件、移动原文件至归档目录、原子替换原路径）；
+      # 归档目录与废弃目录同样需要读写权限 (:rw)，用于永久安全留存原视频。
       - ${HOST_VIDEO_ROOT:-./mock_media/videos}:/media/videos:rw
       - ${HOST_ARCHIVE_DIR:-./mock_media/archive}:/media/archive:rw
       - ${HOST_DISCARDED_DIR:-./mock_media/discarded}:/media/discarded:rw

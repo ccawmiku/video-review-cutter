@@ -74,6 +74,15 @@
 - CI 修复提交：`v1.1.1`
 - PR #2 已通过 GitHub Actions 后合并；`main` 合并提交打标：`v1.1.2`
 - Docker 约束：本机未运行 Docker；Docker 构建验证仅通过 GitHub Actions 执行。
+
+## 调度协议修订
+
+- AGY 只负责实现、精确修复、提交、打 tag 和创建 PR。
+- AGY 禁止启动长时间运行的后台检查或后台服务。
+- `mypy`、`ruff`、`pytest`、`pnpm`、`build` 等检查由主代理通过外层同步命令执行。
+- CI 失败时，只向 AGY 分配精确的错误修复任务，不让其重跑整套检查。
+- 只有存在未提交工作树时才开启第二个 CLI 窗口；已提交且工作树干净时不额外开窗。
+- 该协议用于避免 AGY 结束时误杀后台任务，并让检查生命周期由主代理统一控制。
 - Issue #3：视频元数据目录扫描功能实现（分支：`issue-3-catalog`，版本标签：`v1.2.0`）。
   - 实现 SQLite SQLAlchemy `Video` 模型与 `VideoStatus` 状态枚举（支持 `unprocessed`、`no_action`、`clip_selected`、`replaced`、`discarded`）。
   - 实现可注入的 `ffprobe` 接口与探针数据容错解析器。
@@ -99,6 +108,15 @@
   - 审计字段与向后兼容模式：新增 `original_path`、`discarded_at`、`move_metadata` 数据库字段与 `current_path` 计算属性；提供自适应 schema 迁移初始化，支持旧版 SQLite 数据库无缝升级。
   - 更新 `docker-compose.yml` 视频源挂载为读写权限 (`:rw`)，并详细备注移动/移除文件所需的权限原因。
   - 全套 48 个单元与集成测试全部通过，通过 ruff 格式化与代码风格检查。
+- Issue #15：后端剪辑处理、归档与安全替换工作流（分支：`issue-15-processing`，版本标签：`v1.8.0`）。
+  - 实现持久化后台处理任务模型 `ProcessingJob` 与生命周期状态机（支持 `queued`、`running`、`succeeded`、`failed`、`cancelled`），包含进度、状态信息、错误、策略与审计时间戳。
+  - 实现幂等性防护机制：同一视频存在未完成任务（`queued` / `running`）时拒绝重复提交（HTTP 409 Conflict）。
+  - 严密安全校验：严格验证源视频文件为常规文件且位于配置的 `VIDEO_ROOTS` 内（防路径穿越与符号链接逃逸）；验证目的 `ARCHIVE_DIR`；校验视频状态及片段边界。
+  - 实现可注入的 `FFmpegRunner` 抽象与 `FFmpegCommandBuilder`：按顺序渲染片段，优先采用安全 stream-copy concat，遇到不兼容或错误自动降级回退至 H.264/AAC 重新编码。
+  - 实现临时输出与原子替换：在原视频同级目录生成临时文件并强校验其为非空常规文件；将原视频以确定性防冲突名称安全移入 `ARCHIVE_DIR`（绝不删除原文件）；原子重命名临时文件覆盖原路径。
+  - 仅在所有文件系统和数据库步骤全部成功后才将 `Video.status` 更新为 `replaced`；任何步骤发生异常时完整回滚文件系统并恢复原文件与 DB 状态，清理临时文件，记录失败任务。
+  - 提供 `/api/videos/{video_id}/process`、`/api/videos/{video_id}/jobs` 及 `/api/jobs/{job_id}` 查询与取消 API。
+  - 更新 `docker-compose.yml` 挂载注释；编写完整单元与集成测试（覆盖命令构造、任务流转/幂等性、归档替换与渲染/归档/替换/DB各阶段失败回滚）。
 
 
 

@@ -9,6 +9,14 @@ from app.services.ffmpeg import (
     ffmpeg_service,
     parse_probe_output,
 )
+from app.services.ffmpeg_runner import (
+    FFmpegCommandBuilder,
+    FFmpegRunner,
+    MockFFmpegRunner,
+    SubprocessFFmpegRunner,
+    render_segments_pipeline,
+)
+from app.services.processing import ProcessingService, processing_service
 from app.services.streaming import (
     RangeNotSatisfiableError,
     StreamingService,
@@ -22,9 +30,14 @@ __all__ = [
     "CatalogService",
     "ClipService",
     "DiscardService",
+    "FFmpegCommandBuilder",
+    "FFmpegRunner",
     "FFmpegService",
+    "MockFFmpegRunner",
+    "ProcessingService",
     "RangeNotSatisfiableError",
     "StreamingService",
+    "SubprocessFFmpegRunner",
     "VideoProbeInterface",
     "catalog_service",
     "clip_service",
@@ -34,6 +47,8 @@ __all__ = [
     "move_file_safely",
     "parse_probe_output",
     "parse_range_header",
+    "processing_service",
+    "render_segments_pipeline",
     "streaming_service",
     "validate_video_path",
 ]

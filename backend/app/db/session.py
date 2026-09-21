@@ -70,7 +70,8 @@ def migrate_schema_compatibility(target_engine: Engine | None = None) -> None:
     eng = target_engine or engine
     try:
         inspector = inspect(eng)
-        if "videos" in inspector.get_table_names():
+        table_names = inspector.get_table_names()
+        if "videos" in table_names:
             columns = {col["name"] for col in inspector.get_columns("videos")}
             with eng.begin() as conn:
                 if "original_path" not in columns:
@@ -79,6 +80,8 @@ def migrate_schema_compatibility(target_engine: Engine | None = None) -> None:
                     conn.execute(text("ALTER TABLE videos ADD COLUMN discarded_at DATETIME"))
                 if "move_metadata" not in columns:
                     conn.execute(text("ALTER TABLE videos ADD COLUMN move_metadata JSON"))
+        if "processing_jobs" not in table_names and "processing_jobs" in Base.metadata.tables:
+            Base.metadata.tables["processing_jobs"].create(bind=eng, checkfirst=True)
     except Exception:
         pass
 
