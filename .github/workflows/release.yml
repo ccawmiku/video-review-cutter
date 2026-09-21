@@ -20,6 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Validate annotated semantic version tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ github.ref_name }}"
           echo "Validating tag: ${TAG_NAME}"
@@ -28,9 +31,9 @@ jobs:
             exit 1
           fi
 
-          TAG_TYPE=$(git cat-file -t "${TAG_NAME}" 2>/dev/null || echo "unknown")
+          TAG_TYPE=$(gh api "repos/${{ github.repository }}/git/ref/tags/${TAG_NAME}" --jq '.object.type' 2>/dev/null || echo "unknown")
           if [ "${TAG_TYPE}" != "tag" ]; then
-            echo "::error::Tag '${TAG_NAME}' is not an annotated tag (detected object type: ${TAG_TYPE})."
+            echo "::error::Tag '${TAG_NAME}' is not an annotated tag (GitHub API object type: ${TAG_TYPE})."
             exit 1
           fi
           echo "Tag ${TAG_NAME} is a valid annotated semantic version tag."
