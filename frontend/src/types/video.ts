@@ -14,11 +14,29 @@ export interface ClipSegment {
   video_id: number
   start_seconds: number
   end_seconds: number
-  duration_seconds: number
+  duration_seconds?: number
   order_index: number
+  order?: number
   label?: string | null
+  note?: string | null
   created_at?: string
   updated_at?: string
+}
+
+export interface ClipSegmentCreatePayload {
+  start_seconds: number
+  end_seconds: number
+  label?: string | null
+  note?: string | null
+  order_index?: number
+}
+
+export interface ClipSegmentUpdatePayload {
+  start_seconds?: number
+  end_seconds?: number
+  label?: string | null
+  note?: string | null
+  order_index?: number
 }
 
 export interface VideoItem {
